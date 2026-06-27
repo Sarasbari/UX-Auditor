@@ -73,22 +73,52 @@ async function startAuditJob(auditRunId: string, url: string) {
       data: { status: "PROCESSING", startedAt: new Date() },
     });
 
-    const { runFullAudit } = await import("@/lib/jobs/audit-orchestrator");
-    const result = await runFullAudit(url);
+    const apiRes = await fetch("http://localhost:8000/audit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: url, audit_id: auditRunId })
+    });
+
+    if (!apiRes.ok) {
+      throw new Error(`FastAPI audit submission failed: ${apiRes.statusText}`);
+    }
+
+    let status = "queued";
+    let reportData: any = null;
+
+    while (status === "queued" || status === "processing") {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      try {
+        const pollRes = await fetch(`http://localhost:8000/report/${auditRunId}`);
+        if (pollRes.ok) {
+          reportData = await pollRes.json();
+          status = reportData.status;
+        } else {
+          console.error(`Polling failed: ${pollRes.statusText}`);
+        }
+      } catch (pollErr) {
+        console.error("Polling fetch error:", pollErr);
+      }
+    }
+
+    if (status === "failed" || !reportData) {
+      throw new Error("Audit failed in Python backend agent");
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.auditRun.update({
         where: { id: auditRunId },
         data: {
           status: "COMPLETED",
-          score: result.score,
+          score: reportData.score,
           completedAt: new Date(),
         },
       });
 
-      for (const issue of result.issues) {
+      for (const issue of reportData.issues) {
         await tx.issue.create({
           data: {
+            id: issue.id,
             auditRunId,
             severity: issue.severity.toUpperCase() as "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR",
             category: issue.category.toUpperCase() as "ACCESSIBILITY" | "UX_HEURISTIC" | "DESIGN_QUALITY" | "CUSTOM_RULE",

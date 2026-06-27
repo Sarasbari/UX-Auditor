@@ -52,7 +52,17 @@ export async function POST(
       createdAt: msg.createdAt.toISOString(),
     }));
 
-    const result = await chatWithAuditReport(chatHistory, issues, message);
+    const apiRes = await fetch("http://localhost:8000/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audit_id: id, message: message })
+    });
+
+    if (!apiRes.ok) {
+      throw new Error(`FastAPI chat failed: ${apiRes.statusText}`);
+    }
+
+    const result = await apiRes.json();
 
     await prisma.$transaction([
       prisma.chatMessage.create({
