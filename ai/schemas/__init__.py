@@ -8,6 +8,10 @@ from .execution_result import ExecutionResult
 from .capability import AgentCapability
 from .browser_capture import BrowserCapture, ViewportInfo, ComputedStyle
 from .finding import Finding, FindingCategory, FindingSeverity, FindingSource
+from .patch import Patch, PatchStatus, PatchStrategy
+from .verification import VerificationResult
+from .report_section import ReportSection, ReportSectionType
+from .recommendation import Recommendation, BusinessImpactCategory, PriorityLevel, DeveloperEffort
 
 __all__ = [
     "Evidence",
@@ -27,4 +31,14 @@ __all__ = [
     "FindingCategory",
     "FindingSeverity",
     "FindingSource",
+    "Patch",
+    "PatchStatus",
+    "PatchStrategy",
+    "VerificationResult",
+    "ReportSection",
+    "ReportSectionType",
+    "Recommendation",
+    "BusinessImpactCategory",
+    "PriorityLevel",
+    "DeveloperEffort",
 ]
