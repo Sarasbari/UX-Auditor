@@ -5,7 +5,16 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    const userId = session?.user?.id || "anonymous";
+    let userId = session?.user?.id;
+
+    if (!userId) {
+      const anonymousUser = await prisma.user.upsert({
+        where: { email: "anonymous@ux-auditor.local" },
+        update: {},
+        create: { email: "anonymous@ux-auditor.local", name: "Anonymous" },
+      });
+      userId = anonymousUser.id;
+    }
 
     const body = await request.json();
     const { url } = body;
@@ -105,7 +114,17 @@ async function startAuditJob(auditRunId: string, url: string) {
 export async function GET() {
   try {
     const session = await auth();
-    const userId = session?.user?.id || "anonymous";
+    let userId = session?.user?.id;
+
+    if (!userId) {
+      const anonymousUser = await prisma.user.findUnique({
+        where: { email: "anonymous@ux-auditor.local" },
+      });
+      if (!anonymousUser) {
+        return NextResponse.json([]);
+      }
+      userId = anonymousUser.id;
+    }
 
     const auditRuns = await prisma.auditRun.findMany({
       where: { userId },
