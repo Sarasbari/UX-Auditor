@@ -146,6 +146,44 @@ async def get_progress(audit_id: str):
         "progress": audit_progress.get(audit_id, ["No progress logs yet."])
     }
 
+class ChatRequest(BaseModel):
+    audit_id: str
+    message: str
+    selectedIssueId: Optional[str] = None
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest):
+    audit = db.get_audit(req.audit_id)
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+
+    report_json = audit.get("report") or {}
+    chat_history = db.get_chat_history(req.audit_id)
+
+    from server.llm_layer import chat_with_audit_report
+    result = await chat_with_audit_report(
+        chat_history=chat_history,
+        report_data=report_json,
+        message=req.message,
+        score=audit.get("score"),
+        selected_issue_id=req.selectedIssueId
+    )
+
+    # Save chat messages
+    db.save_chat_message(req.audit_id, "user", req.message, [])
+    db.save_chat_message(
+        req.audit_id,
+        "assistant",
+        result.get("response", ""),
+        result.get("citedIssueIds", [])
+    )
+
+    return {
+        "response": result.get("response", ""),
+        "citedIssueIds": result.get("citedIssueIds", []),
+        "suggestedFollowUps": result.get("suggestedFollowUps", []),
+    }
+
 # HTML String for the Premium SPA Frontend
 HTML_DASHBOARD = """
 <!DOCTYPE html>
@@ -329,21 +367,30 @@ HTML_DASHBOARD = """
 
         <!-- Right Panel: Conversational Q&A (chat) -->
         <div class="w-full lg:w-96 flex flex-col h-[650px] lg:h-auto lg:min-h-[500px] glass-panel rounded-2xl shadow-xl overflow-hidden">
-            <div class="p-4 border-b border-gray-800 flex flex-col">
-                <span class="font-bold text-white">UX Chat Assistant</span>
-                <span class="text-xs text-gray-400">Ask clarifying questions about the audit results</span>
+            <div class="p-4 border-b border-gray-800 flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm">🤖</div>
+                <div>
+                    <span class="font-bold text-white text-sm block">UX Audit Assistant</span>
+                    <span class="text-[11px] text-gray-400">Ask about findings, score, and how to fix issues</span>
+                </div>
             </div>
             
             <!-- Chat Messages Box -->
             <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-4 text-sm flex flex-col justify-end">
-                <div class="text-center text-gray-500 py-8" id="chat-placeholder">
-                    No active audit report yet. Run an audit to begin chatting.
+                <div class="text-center text-gray-500 py-6 flex flex-col items-center gap-3" id="chat-placeholder">
+                    <div class="text-2xl">💬</div>
+                    <p>Ask me anything about your audit results</p>
+                    <div id="chat-suggested-prompts" class="flex flex-wrap gap-2 justify-center mt-2" style="display:none;">
+                    </div>
                 </div>
             </div>
 
+            <!-- Follow-up chips container -->
+            <div id="chat-followups" class="px-3 pb-1 flex flex-wrap gap-1.5" style="display:none;"></div>
+
             <!-- Chat Form -->
             <form id="chat-form" class="p-3 bg-gray-900/40 border-t border-gray-800 flex items-center space-x-2">
-                <input type="text" id="chat-input" disabled placeholder="Ask about the audit..." 
+                <input type="text" id="chat-input" disabled placeholder="Ask about your audit findings..." 
                        class="flex-1 bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
                 <button type="submit" id="chat-send-btn" disabled
                         class="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-95 duration-200">
@@ -732,10 +779,27 @@ HTML_DASHBOARD = """
             // Enable chat Q&A
             document.getElementById('chat-input').disabled = false;
             document.getElementById('chat-send-btn').disabled = false;
-            document.getElementById('chat-placeholder').style.display = 'none';
             
-            // Load messages
-            renderChatHistory(data.chatMessages || []);
+            // Load messages or show prompts
+            const existingMessages = data.chatMessages || [];
+            if (existingMessages.length === 0) {
+                // Show suggested prompts
+                const promptsContainer = document.getElementById('chat-suggested-prompts');
+                promptsContainer.style.display = 'flex';
+                const prompts = [
+                    "How can I improve my UX score?",
+                    "What should I fix first?",
+                    "Summarize the key issues",
+                    "Show me quick wins",
+                    "Explain the most serious issues"
+                ];
+                promptsContainer.innerHTML = prompts.map(p => 
+                    `<button type="button" onclick="sendChatMessage('${p}')" class="text-[11px] px-3 py-1.5 rounded-full border border-blue-800 bg-blue-950/50 text-blue-400 hover:bg-blue-900/50 hover:border-blue-600 transition cursor-pointer">${p}</button>`
+                ).join('');
+            } else {
+                document.getElementById('chat-placeholder').style.display = 'none';
+                renderChatHistory(existingMessages);
+            }
         }
 
         function renderIssues(issues) {
@@ -1021,16 +1085,17 @@ HTML_DASHBOARD = """
                 renderIssues(allIssues.filter(i => i.severity === severity));
             }
         }        // Chat logic
-        document.getElementById('chat-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const inputEl = document.getElementById('chat-input');
-            const userMsg = inputEl.value.trim();
-            if (!userMsg || !currentAuditId) return;
-
-            inputEl.value = "";
-            appendMessage("user", userMsg);
+        async function sendChatMessage(text) {
+            if (!text || !currentAuditId) return;
             
-            // Disable while responding
+            // Hide placeholder and prompts
+            document.getElementById('chat-placeholder').style.display = 'none';
+            document.getElementById('chat-followups').style.display = 'none';
+            
+            appendMessage("user", text);
+            
+            const inputEl = document.getElementById('chat-input');
+            inputEl.value = "";
             inputEl.disabled = true;
             document.getElementById('chat-send-btn').disabled = true;
 
@@ -1038,28 +1103,59 @@ HTML_DASHBOARD = """
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ audit_id: currentAuditId, message: userMsg })
+                    body: JSON.stringify({ audit_id: currentAuditId, message: text })
                 });
                 
                 const data = await response.json();
                 appendMessage("assistant", data.response, data.citedIssueIds);
+                
+                // Show follow-up chips
+                const followupsEl = document.getElementById('chat-followups');
+                if (data.suggestedFollowUps && data.suggestedFollowUps.length > 0) {
+                    followupsEl.innerHTML = data.suggestedFollowUps.map(f => 
+                        `<button type="button" onclick="sendChatMessage('${f.replace(/'/g, "\\'")}')" class="text-[11px] px-2.5 py-1 rounded-full border border-purple-800 bg-purple-950/40 text-purple-400 hover:bg-purple-900/40 hover:border-purple-600 transition cursor-pointer">${f}</button>`
+                    ).join('');
+                    followupsEl.style.display = 'flex';
+                } else {
+                    followupsEl.style.display = 'none';
+                }
             } catch (err) {
                 console.error("Chat failure:", err);
-                appendMessage("assistant", "Sorry, I had trouble reaching the AI brain. Please try again.");
+                appendMessage("assistant", "Sorry, something went wrong. Please try again.");
             } finally {
                 inputEl.disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
                 inputEl.focus();
             }
+        }
+
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const inputEl = document.getElementById('chat-input');
+            const userMsg = inputEl.value.trim();
+            if (!userMsg) return;
+            sendChatMessage(userMsg);
         });
 
         function renderChatHistory(messages) {
             const chatBox = document.getElementById('chat-messages');
             chatBox.innerHTML = "";
             messages.forEach(msg => {
-                appendMessage(msg.role, msg.content, msg.cited_issue_ids, false);
+                appendMessage(msg.role, msg.content, msg.citedIssueIds || msg.cited_issue_ids, false);
             });
             chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function getIssueLabel(issue) {
+            if (!issue) return "Issue";
+            const ruleId = issue.ruleId || "";
+            if (ruleId === "color-contrast") return "Low text contrast";
+            if (ruleId === "small-touch-target" || ruleId === "target-size") return "Small touch target";
+            if (ruleId === "button-name") return "Button needs name";
+            if (ruleId === "image-alt") return "Image needs alt text";
+            if (ruleId === "link-name") return "Link needs text";
+            const desc = (issue.description || "").substring(0, 30);
+            return desc || "Issue";
         }
 
         function appendMessage(role, content, citedIssueIds = [], scroll = true) {
@@ -1069,26 +1165,26 @@ HTML_DASHBOARD = """
             const isUser = role.toLowerCase() === 'user';
             msgEl.className = `flex flex-col space-y-1 ${isUser ? 'items-end' : 'items-start'}`;
             
-            // Format cited issue HTML
+            // Format cited issue chips
             let citationHtml = "";
-            if (citedIssueIds && citedIssueIds.length > 0) {
-                citationHtml = `<div class="mt-1.5 flex flex-wrap gap-1.5">` + 
-                    citedIssueIds.map(id => {
+            if (!isUser && citedIssueIds && citedIssueIds.length > 0) {
+                citationHtml = `<div class="mt-2 flex flex-wrap gap-1">` + 
+                    citedIssueIds.slice(0, 5).map(id => {
                         const targetIssue = allIssues.find(i => i.id === id);
-                        const label = targetIssue ? targetIssue.severity.substring(0, 3).toUpperCase() + ': ' + (targetIssue.elementSelector || 'Global').substring(0,10) + '...' : id.substring(0,8);
-                        return `<span onclick="highlightIssue('${id}')" class="cursor-pointer text-[9px] font-bold px-2 py-0.5 bg-gray-900 text-purple-400 border border-purple-955 rounded hover:bg-gray-800 hover:text-purple-300 transition">${label}</span>`;
+                        const label = getIssueLabel(targetIssue);
+                        return `<span onclick="highlightIssue('${id}')" class="cursor-pointer text-[10px] px-2 py-0.5 bg-amber-950/50 text-amber-400 border border-amber-800 rounded-full hover:bg-amber-900/50 transition truncate max-w-[180px]">📌 ${label}</span>`;
                     }).join('') + `</div>`;
             }
 
             msgEl.innerHTML = `
-                <div class="px-3.5 py-2.5 rounded-2xl max-w-[85%] shadow-md leading-relaxed text-xs ${
+                <div class="px-3.5 py-2.5 rounded-2xl max-w-[90%] shadow-md leading-relaxed text-[13px] ${
                     isUser 
-                        ? 'bg-blue-600 text-white rounded-br-none' 
-                        : 'bg-gray-900 text-gray-200 border border-gray-800 rounded-bl-none'
+                        ? 'bg-blue-600 text-white rounded-br-sm' 
+                        : 'bg-gray-900 text-gray-200 border border-gray-800 rounded-bl-sm'
                 }">
-                    ${formatMarkdownText(content)}
-                    ${citationHtml}
+                    ${isUser ? escapeHtml(content) : formatMarkdownText(content)}
                 </div>
+                ${citationHtml}
             `;
             
             chatBox.appendChild(msgEl);
@@ -1105,15 +1201,30 @@ HTML_DASHBOARD = """
             const card = document.querySelector(`[data-issue-id="${id}"]`);
             if (card) {
                 card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.style.boxShadow = '0 0 0 2px #60a5fa';
+                setTimeout(() => { card.style.boxShadow = ''; }, 2000);
             }
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
         function formatMarkdownText(text) {
             return text
-                .replace(/\n/g, '<br>')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/`/g, '&#96;')
-                .replace(/&#96;(.*?)&#96;/g, '<code class="bg-black/35 px-1 rounded text-purple-300 font-mono text-[10px]">$1</code>');
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/```\\w*\\n([\\s\\S]*?)```/g, '<pre class="bg-black/50 rounded-lg p-2 my-1 text-[11px] text-green-300 font-mono overflow-x-auto"><code>$1</code></pre>')
+                .replace(/`([^`]+)`/g, '<code class="bg-black/35 px-1 rounded text-purple-300 font-mono text-[11px]">$1</code>')
+                .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+                .replace(/\\*(.*?)\\*/g, '<em>$1</em>')
+                .replace(/^### (.+)$/gm, '<h3 class="text-sm font-bold mt-2 mb-1">$1</h3>')
+                .replace(/^## (.+)$/gm, '<h2 class="text-sm font-bold mt-2 mb-1">$1</h2>')
+                .replace(/^# (.+)$/gm, '<h1 class="text-base font-bold mt-2 mb-1">$1</h1>')
+                .replace(/^- (.+)$/gm, '<li class="ml-3">• $1</li>')
+                .replace(/^\\d+\\. (.+)$/gm, '<li class="ml-3">$1</li>')
+                .replace(/\\n\\n/g, '<br><br>')
+                .replace(/\\n/g, '<br>');
+        }
     </script>
 </body>
 </html>

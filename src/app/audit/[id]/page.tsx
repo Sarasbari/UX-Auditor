@@ -42,6 +42,7 @@ interface ChatMessage {
   role: string;
   content: string;
   citedIssueIds: string[];
+  suggestedFollowUps?: string[];
 }
 
 // ── HELPER FUNCTIONS ────────────────────────────────────────────────────────
@@ -235,6 +236,29 @@ function getStepStatus(stepId: string, status: string, progress: string[] = []):
   return "pending";
 }
 
+// ── SIMPLE MARKDOWN RENDERER ─────────────────────────────────────────────────
+function simpleMarkdown(text: string): string {
+  if (!text) return "";
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br/>');
+  if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<pre')) {
+    html = `<p>${html}</p>`;
+  }
+  return html;
+}
 
 export default function AuditPage() {
   const params = useParams();
@@ -245,6 +269,19 @@ export default function AuditPage() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [filter, setFilter] = useState<string>("all");
+
+  const highlightIssue = (issueId: string) => {
+    setExpandedIssueId(issueId);
+    setActiveTab("overview");
+    setTimeout(() => {
+      const el = document.getElementById(`issue-card-${issueId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-blue-400");
+        setTimeout(() => el.classList.remove("ring-2", "ring-blue-400"), 2000);
+      }
+    }, 100);
+  };
 
   useEffect(() => {
     let active = true;
@@ -284,16 +321,20 @@ export default function AuditPage() {
     };
   }, [params.id]);
 
-  const handleChat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() || !audit) return;
+  const handleChat = async (e?: React.FormEvent, customText?: string) => {
+    if (e) e.preventDefault();
+    const textToSend = customText || chatInput;
+    if (!textToSend.trim() || !audit || chatLoading) return;
 
     setChatLoading(true);
     try {
       const response = await fetch(`/api/audit/${audit.id}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: chatInput }),
+        body: JSON.stringify({
+          message: textToSend,
+          selectedIssueId: expandedIssueId,
+        }),
       });
 
       if (response.ok) {
@@ -302,11 +343,19 @@ export default function AuditPage() {
           ...prev,
           chatMessages: [
             ...prev.chatMessages,
-            { id: "user-" + Date.now(), role: "user", content: chatInput, citedIssueIds: [] },
-            { id: "assistant-" + Date.now(), role: "assistant", content: data.response, citedIssueIds: data.citedIssueIds },
+            { id: "user-" + Date.now(), role: "user", content: textToSend, citedIssueIds: [] },
+            {
+              id: "assistant-" + Date.now(),
+              role: "assistant",
+              content: data.response,
+              citedIssueIds: data.citedIssueIds || [],
+              suggestedFollowUps: data.suggestedFollowUps || [],
+            },
           ],
         } : null);
-        setChatInput("");
+        if (!customText) {
+          setChatInput("");
+        }
       }
     } catch (error) {
       console.error("Chat failed:", error);
@@ -589,6 +638,7 @@ export default function AuditPage() {
                 return (
                   <div
                     key={issue.id}
+                    id={`issue-card-${issue.id}`}
                     role="button"
                     tabIndex={0}
                     aria-expanded={isExpanded}
@@ -846,52 +896,135 @@ export default function AuditPage() {
           {/* ── RIGHT COLUMN: CHAT ASSISTANT ONLY ── */}
           <div className="space-y-6">
             {/* CHAT ASSISTANT PANEL */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-150 overflow-hidden lg:sticky lg:top-4">
-              <div className="p-4 border-b bg-gray-50">
-                <h2 className="font-bold text-gray-900">Chat Assistant</h2>
-                <p className="text-xs text-gray-500">Ask the AI brain how to resolve your audit findings</p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-150 overflow-hidden lg:sticky lg:top-4 flex flex-col" style={{ maxHeight: "calc(100vh - 2rem)" }}>
+              <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm">🤖</div>
+                  <div>
+                    <h2 className="font-bold text-gray-900 text-sm">UX Audit Assistant</h2>
+                    <p className="text-[11px] text-gray-500">Ask about your audit findings, score, and how to fix issues</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="h-[450px] overflow-y-auto p-4 space-y-3 bg-white">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white min-h-[300px] max-h-[500px]" id="chat-messages-container">
                 {audit.chatMessages.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-20">
-                    No messages yet. Ask a question about your audit results.
-                  </p>
-                )}
-                {audit.chatMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed shadow-sm ${
-                        msg.role === "user"
-                          ? "bg-blue-600 text-white rounded-br-none"
-                          : "bg-gray-50 text-gray-800 border border-gray-200 rounded-bl-none"
-                      }`}
-                    >
-                      {msg.content}
+                  <div className="flex flex-col items-center justify-center py-8 gap-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">💬</div>
+                    <p className="text-sm text-gray-400 text-center">
+                      Ask me anything about your audit results
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center px-2">
+                      {[
+                        "How can I improve my UX score?",
+                        "What should I fix first?",
+                        "Summarize the key issues",
+                        "Show me quick wins",
+                        "Explain the most serious issues",
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => handleChat(undefined, prompt)}
+                          className="text-[11px] px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
                     </div>
                   </div>
+                )}
+
+                {audit.chatMessages.map((msg, msgIdx) => (
+                  <div key={msg.id} className="space-y-1.5">
+                    <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed shadow-sm ${
+                          msg.role === "user"
+                            ? "bg-blue-600 text-white rounded-br-sm"
+                            : "bg-gray-50 text-gray-800 border border-gray-200 rounded-bl-sm"
+                        }`}
+                      >
+                        {msg.role === "assistant" ? (
+                          <div
+                            className="prose prose-xs prose-gray max-w-none [&_h1]:text-sm [&_h2]:text-[13px] [&_h3]:text-[12px] [&_p]:text-[13px] [&_li]:text-[13px] [&_code]:text-[11px] [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_pre]:text-[11px] [&_pre]:bg-gray-900 [&_pre]:text-gray-100 [&_pre]:rounded-lg [&_pre]:p-2 [&_strong]:font-semibold [&_ul]:pl-4 [&_ol]:pl-4"
+                            dangerouslySetInnerHTML={{ __html: simpleMarkdown(msg.content) }}
+                          />
+                        ) : (
+                          msg.content
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Cited issue chips */}
+                    {msg.role === "assistant" && msg.citedIssueIds && msg.citedIssueIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pl-1">
+                        {msg.citedIssueIds.slice(0, 5).map((issueId) => {
+                          const cited = audit.issues.find((i) => i.id === issueId);
+                          if (!cited) return null;
+                          return (
+                            <button
+                              key={issueId}
+                              type="button"
+                              onClick={() => highlightIssue(issueId)}
+                              className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer truncate max-w-[200px]"
+                              title={cited.description}
+                            >
+                              📌 {getIssueTitle(cited).slice(0, 35)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Suggested follow-ups after last assistant message */}
+                    {msg.role === "assistant" && msg.suggestedFollowUps && msg.suggestedFollowUps.length > 0 && msgIdx === audit.chatMessages.length - 1 && (
+                      <div className="flex flex-wrap gap-1.5 pl-1 pt-1">
+                        {msg.suggestedFollowUps.map((followUp) => (
+                          <button
+                            key={followUp}
+                            type="button"
+                            onClick={() => handleChat(undefined, followUp)}
+                            disabled={chatLoading}
+                            className="text-[11px] px-2.5 py-1 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {followUp}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
+
+                {chatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 text-xs text-gray-500">
+                      <span className="inline-flex gap-1">
+                        <span className="animate-bounce" style={{ animationDelay: "0ms" }}>●</span>
+                        <span className="animate-bounce" style={{ animationDelay: "150ms" }}>●</span>
+                        <span className="animate-bounce" style={{ animationDelay: "300ms" }}>●</span>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <form onSubmit={handleChat} className="p-3 border-t bg-gray-50">
+              <form onSubmit={handleChat} className="p-3 border-t bg-gray-50 flex-shrink-0">
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Ask how to fix these issues..."
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ask about your audit findings..."
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     disabled={chatLoading}
                   />
                   <button
                     type="submit"
                     disabled={chatLoading || !chatInput.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 font-semibold"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 font-semibold transition-colors"
                   >
-                    Send
+                    {chatLoading ? "..." : "Send"}
                   </button>
                 </div>
               </form>

@@ -511,73 +511,275 @@ async def rerank_and_generate_fixes(raw_findings: List[Dict[str, Any]], url: str
     result_json["score"] = calculate_ux_score(issues)
     return result_json
 
-async def chat_with_audit_report(chat_history: List[Dict[str, Any]], report_data: Dict[str, Any], message: str) -> Dict[str, Any]:
+async def chat_with_audit_report(
+    chat_history: List[Dict[str, Any]],
+    report_data: Dict[str, Any],
+    message: str,
+    score: int = None,
+    selected_issue_id: str = None
+) -> Dict[str, Any]:
     """
-    Answers user questions grounded in the audit report findings, returning chat text response and cited issues.
+    Answers user questions grounded in the audit report findings.
+    Uses LLM when available, falls back to deterministic intent-based handlers.
+    Returns: { response, citedIssueIds, suggestedFollowUps }
     """
-    openai_key = os.getenv("OPENAI_API_KEY")
-    
-    # Prepare context
-    report_context = {
-        "url": report_data.get("url"),
-        "score": report_data.get("score"),
-        "issues": [
-            {
-                "id": i.get("id"),
-                "severity": i.get("severity"),
-                "category": i.get("category"),
-                "element": i.get("elementSelector"),
-                "description": i.get("description"),
-                "fix": i.get("fixSuggestion"),
-                "patch": i.get("fixDiff", {}).get("patched") if i.get("fixDiff") else None
+    issues = report_data.get("issues", [])
+    audit_score = score if score is not None else report_data.get("score", 0)
+    url = report_data.get("url", "")
+
+    # ── INTENT DETECTION ──────────────────────────────────────────────────
+    def detect_intent(msg: str) -> str:
+        m = msg.lower()
+        if any(k in m for k in ["improve score", "raise score", "increase score", "better score", "how to improve"]):
+            return "improve_score"
+        if any(k in m for k in ["fix first", "priority", "most important", "start with", "what should i fix"]):
+            return "fix_first"
+        if any(k in m for k in ["summary", "summarize", "overview", "key issues", "main problems"]):
+            return "summary"
+        if any(k in m for k in ["serious", "worst", "most severe", "critical"]):
+            return "why_serious"
+        if any(k in m for k in ["contrast", "color contrast", "text contrast", "readab"]):
+            return "fix_contrast"
+        if any(k in m for k in ["touch", "tap target", "target size", "button size", "clickable"]):
+            return "fix_touch"
+        if any(k in m for k in ["wcag", "accessibility", "a11y", "screen reader", "aria"]):
+            return "wcag_issues"
+        if any(k in m for k in ["code fix", "code example", "html fix", "css fix", "show code", "snippet"]):
+            return "code_fix"
+        if any(k in m for k in ["quick win", "easy fix", "low effort", "fast"]):
+            return "quick_wins"
+        if any(k in m for k in ["business", "impact", "cost", "revenue", "user impact"]):
+            return "business_impact"
+        return "general"
+
+    # ── ISSUE RANKING ─────────────────────────────────────────────────────
+    def rank_issues(issue_list: List[Dict]) -> List[Dict]:
+        sev_order = {"critical": 0, "serious": 1, "moderate": 2, "minor": 3}
+        conf_order = {"high": 0, "medium": 1, "low": 2}
+        return sorted(issue_list, key=lambda i: (
+            sev_order.get((i.get("severity") or "moderate").lower(), 2),
+            conf_order.get((i.get("confidence") or "medium").lower(), 1),
+        ))
+
+    # ── FORMAT ISSUE LINE ─────────────────────────────────────────────────
+    def fmt(issue: Dict, idx: int = 0) -> str:
+        sev = (issue.get("severity") or "moderate").upper()
+        desc = issue.get("description", "")
+        sel = issue.get("elementSelector", "")
+        fix = issue.get("fixSuggestion", "")
+        lines = [f"{idx + 1}. **[{sev}]** {desc}"]
+        if sel:
+            lines.append(f"   - Element: `{sel}`")
+        if fix:
+            lines.append(f"   - Fix: {fix}")
+        return "\n".join(lines)
+
+    # ── DETERMINISTIC HANDLERS ────────────────────────────────────────────
+    def handle_improve_score() -> Dict:
+        ranked = rank_issues(issues)[:5]
+        lines = [f"## How to improve your UX score (currently **{audit_score}/100**)\n"]
+        lines.append("Focus on these top-priority issues first:\n")
+        for idx, issue in enumerate(ranked):
+            lines.append(fmt(issue, idx))
+        lines.append("\n---\n*Fixing the top 3 issues could improve your score by 10-20 points.*")
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
+            "suggestedFollowUps": ["Show me code fixes for these", "What are quick wins?", "Explain the most serious issues"]
+        }
+
+    def handle_fix_first() -> Dict:
+        ranked = rank_issues(issues)[:5]
+        lines = ["## Priority fix order\n"]
+        lines.append("Based on severity, confidence, and user impact:\n")
+        for idx, issue in enumerate(ranked):
+            lines.append(fmt(issue, idx))
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
+            "suggestedFollowUps": ["Show code fixes for #1", "How will this affect my score?", "What are the quick wins?"]
+        }
+
+    def handle_summary() -> Dict:
+        sev_counts = {}
+        for i in issues:
+            s = (i.get("severity") or "moderate").lower()
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+        lines = [f"## Audit summary for {url}\n"]
+        lines.append(f"**Score:** {audit_score}/100  ")
+        lines.append(f"**Total issues:** {len(issues)}\n")
+        for sev in ["critical", "serious", "moderate", "minor"]:
+            if sev in sev_counts:
+                lines.append(f"- **{sev.capitalize()}:** {sev_counts[sev]}")
+        top3 = rank_issues(issues)[:3]
+        if top3:
+            lines.append("\n### Top 3 issues to address\n")
+            for idx, issue in enumerate(top3):
+                lines.append(fmt(issue, idx))
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in top3 if i.get("id")],
+            "suggestedFollowUps": ["How to improve the score?", "Show me quick wins", "What are the WCAG issues?"]
+        }
+
+    def handle_category(cat_keywords: List[str], title: str) -> Dict:
+        matched = [i for i in issues if any(k in (i.get("description") or "").lower() or k in (i.get("ruleId") or "").lower() or k in (i.get("category") or "").lower() for k in cat_keywords)]
+        ranked = rank_issues(matched)[:5]
+        if not ranked:
+            return {
+                "response": f"No {title.lower()} issues found in this audit report.",
+                "citedIssueIds": [],
+                "suggestedFollowUps": ["Summarize the key issues", "What should I fix first?"]
             }
-            for i in report_data.get("issues", [])
-        ]
-    }
+        lines = [f"## {title} issues ({len(matched)} found)\n"]
+        for idx, issue in enumerate(ranked):
+            lines.append(fmt(issue, idx))
+        if len(matched) > 5:
+            lines.append(f"\n*...and {len(matched) - 5} more.*")
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
+            "suggestedFollowUps": ["Show code fixes", "How to improve the score?", "What should I fix first?"]
+        }
+
+    def handle_quick_wins() -> Dict:
+        easy = [i for i in issues if (i.get("severity") or "").lower() in ("minor", "moderate") and (i.get("confidence") or "").lower() == "high"]
+        ranked = rank_issues(easy)[:5]
+        if not ranked:
+            ranked = rank_issues(issues)[-3:]
+        lines = ["## Quick wins\n", "These issues are high-confidence and easier to fix:\n"]
+        for idx, issue in enumerate(ranked):
+            lines.append(fmt(issue, idx))
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
+            "suggestedFollowUps": ["Show code fixes for these", "What are the most serious issues?"]
+        }
+
+    def handle_code_fix() -> Dict:
+        target_issues = issues
+        if selected_issue_id:
+            sel = [i for i in issues if i.get("id") == selected_issue_id]
+            if sel:
+                target_issues = sel
+        ranked = rank_issues(target_issues)[:3]
+        lines = ["## Code fix examples\n"]
+        for idx, issue in enumerate(ranked):
+            lines.append(f"### Fix {idx + 1}: {issue.get('description', 'Issue')[:60]}\n")
+            fix_diff = issue.get("fixDiff") or {}
+            if fix_diff.get("original") and fix_diff.get("patched"):
+                lines.append("**Before:**")
+                lines.append(f"```html\n{fix_diff['original']}\n```\n")
+                lines.append("**After:**")
+                lines.append(f"```html\n{fix_diff['patched']}\n```\n")
+            elif issue.get("fixSuggestion"):
+                lines.append(f"**Suggestion:** {issue['fixSuggestion']}\n")
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
+            "suggestedFollowUps": ["What should I fix first?", "How will fixing these affect my score?"]
+        }
+
+    def handle_general() -> Dict:
+        # Keyword matching across issues
+        msg_lower = message.lower()
+        words = [w for w in msg_lower.split() if len(w) > 3]
+        matched = []
+        for issue in issues:
+            desc = (issue.get("description") or "").lower()
+            sel = (issue.get("elementSelector") or "").lower()
+            cat = (issue.get("category") or "").lower()
+            rule = (issue.get("ruleId") or "").lower()
+            if any(w in desc or w in sel or w in cat or w in rule for w in words):
+                matched.append(issue)
+        ranked = rank_issues(matched)[:5] if matched else rank_issues(issues)[:3]
+        if matched:
+            lines = [f"## Found {len(matched)} related issues\n"]
+        else:
+            lines = ["## Here are the top issues from your audit\n"]
+        for idx, issue in enumerate(ranked):
+            lines.append(fmt(issue, idx))
+        lines.append(f"\n*Your current UX score is **{audit_score}/100** across {len(issues)} total issues.*")
+        return {
+            "response": "\n".join(lines),
+            "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
+            "suggestedFollowUps": ["How to improve my score?", "What should I fix first?", "Show me quick wins"]
+        }
+
+    # ── TRY LLM FIRST ────────────────────────────────────────────────────
+    openai_key = os.getenv("OPENAI_API_KEY")
 
     if openai_key and not openai_key.startswith("sk-..."):
         try:
+            report_context = {
+                "url": url,
+                "score": audit_score,
+                "issues": [
+                    {
+                        "id": i.get("id"),
+                        "severity": i.get("severity"),
+                        "category": i.get("category"),
+                        "confidence": i.get("confidence"),
+                        "element": i.get("elementSelector"),
+                        "description": i.get("description"),
+                        "fix": i.get("fixSuggestion"),
+                        "ruleId": i.get("ruleId"),
+                        "actualValue": i.get("actualValue"),
+                        "expectedValue": i.get("expectedValue"),
+                        "patch": i.get("fixDiff", {}).get("patched") if i.get("fixDiff") else None
+                    }
+                    for i in issues
+                ]
+            }
+
+            system_prompt = f"""You are a senior UX auditor and accessibility engineer.
+You have access to the complete audit report below. Answer ONLY from the audit data provided.
+Prioritize issues by severity, confidence, and user impact. Cite issue IDs when referencing specific findings.
+Do not invent findings. If the user asks for code fixes, produce practical HTML/CSS examples.
+
+AUDIT REPORT:
+{json.dumps(report_context, indent=2)}
+
+Respond with a JSON object:
+{{
+  "response": "your markdown answer",
+  "citedIssueIds": ["uuid-1", "uuid-2"],
+  "suggestedFollowUps": ["follow-up question 1", "follow-up question 2"]
+}}"""
+
             llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.2, response_format={"type": "json_object"})
-            system_msg = CHAT_SYSTEM_PROMPT.format(report_context=json.dumps(report_context, indent=2))
-            
-            formatted_messages = [{"role": "system", "content": system_msg}]
+            formatted_messages = [{"role": "system", "content": system_prompt}]
             for chat in chat_history:
                 role = chat.get("role", "user").lower()
                 if role in ["user", "assistant"]:
                     formatted_messages.append({"role": role, "content": chat.get("content", "")})
-                    
             formatted_messages.append({"role": "user", "content": message})
 
             response = await llm.ainvoke(formatted_messages)
-            return json.loads(response.content)
+            result = json.loads(response.content)
+            if "suggestedFollowUps" not in result:
+                result["suggestedFollowUps"] = []
+            return result
         except Exception as llm_err:
-            print(f"Chat LLM call failed: {llm_err}. Using deterministic search fallback.")
+            print(f"Chat LLM call failed: {llm_err}. Using deterministic fallback.")
 
-    # Fallback keyword matching
-    message_lower = message.lower()
-    matched_issues = []
-    response_text = "*(Assistant in Local Resilient Mode)*\n\n"
-    
-    for issue in report_data.get("issues", []):
-        desc = (issue.get("description") or "").lower()
-        selector = (issue.get("elementSelector") or "").lower()
-        category = (issue.get("category") or "").lower()
-        
-        if any(keyword in desc or keyword in selector or keyword in category for keyword in message_lower.split() if len(keyword) > 3):
-            matched_issues.append(issue)
-            
-    if matched_issues:
-        response_text += "Based on your audit findings, here are the related issues I located:\n\n"
-        for issue in matched_issues:
-            response_text += f"- **[{issue.get('severity').upper()}]** on `{issue.get('elementSelector')}`:\n  {issue.get('description')}\n  *Recommended Fix:* {issue.get('fixSuggestion')}\n\n"
-    else:
-        response_text += "I searched the audit report but couldn't find any specific matching issues for your query. Here is a summary of the audit findings:\n\n"
-        response_text += f"- **Audited Website**: {report_data.get('url')}\n"
-        response_text += f"- **UX Audit Score**: {report_data.get('score')}/100\n"
-        response_text += f"- **Total Issues Flagged**: {len(report_data.get('issues', []))}\n"
-        response_text += "\nIf you want details on specific issues, try entering words like 'contrast', 'touch', 'label', or 'broken'."
-        
-    return {
-        "response": response_text,
-        "citedIssueIds": [issue.get("id") for issue in matched_issues]
+    # ── DETERMINISTIC FALLBACK ────────────────────────────────────────────
+    intent = detect_intent(message)
+
+    handlers = {
+        "improve_score": handle_improve_score,
+        "fix_first": handle_fix_first,
+        "summary": handle_summary,
+        "why_serious": lambda: handle_category(["critical", "serious"], "Most serious"),
+        "fix_contrast": lambda: handle_category(["contrast", "color-contrast"], "Color contrast"),
+        "fix_touch": lambda: handle_category(["touch", "tap", "target-size", "small-touch"], "Touch target"),
+        "wcag_issues": lambda: handle_category(["accessibility", "wcag", "axe-core", "aria"], "WCAG accessibility"),
+        "code_fix": handle_code_fix,
+        "quick_wins": handle_quick_wins,
+        "business_impact": handle_improve_score,
+        "general": handle_general,
     }
+
+    handler = handlers.get(intent, handle_general)
+    return handler()
+

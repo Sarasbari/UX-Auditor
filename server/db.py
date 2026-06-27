@@ -47,10 +47,18 @@ def get_audit(audit_id: str):
         return res
     return None
 
-def save_chat_message(audit_id: str, role: str, content: str, cited_issue_ids: list = None):
-    # No-op since Next.js/Prisma handles chat persistence exclusively
-    pass
+_chat_messages: Dict[str, List[Dict[str, Any]]] = {}
 
-def get_chat_history(audit_id: str):
-    # No-op/empty since Next.js/Prisma handles chat persistence exclusively
-    return []
+def save_chat_message(audit_id: str, role: str, content: str, cited_issue_ids: list = None):
+    if audit_id not in _chat_messages:
+        _chat_messages[audit_id] = []
+    _chat_messages[audit_id].append({
+        "id": f"{role}-{len(_chat_messages[audit_id])}",
+        "role": role,
+        "content": content,
+        "citedIssueIds": cited_issue_ids or []
+    })
+
+def get_chat_history(audit_id: str) -> List[Dict[str, Any]]:
+    return _chat_messages.get(audit_id, [])
+

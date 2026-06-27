@@ -10,7 +10,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { message } = body;
+    const { message, selectedIssueId } = body;
 
     if (!message) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
@@ -30,19 +30,35 @@ export async function POST(
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
 
-    const issues = auditRun.issues.map(issue => ({
-      id: issue.id,
-      severity: issue.severity.toLowerCase() as "critical" | "serious" | "moderate" | "minor",
-      category: issue.category.toLowerCase() as "accessibility" | "ux_heuristic" | "design_quality" | "custom_rule",
-      elementSelector: issue.elementSelector,
-      description: issue.description,
-      fixSuggestion: issue.fixSuggestion || "",
-      fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff as string) as FixDiff : null,
-      verifiedFixStatus: issue.verifiedFixStatus.toLowerCase() as "pending" | "success" | "failed" | "not_applicable",
-      source: issue.source.toLowerCase() as "deterministic" | "llm" | "merged",
-      sources: [],
-      screenshots: {},
-    }));
+    const issues = auditRun.issues.map(issue => {
+      let parsedSample: any[] = [];
+      try {
+        if (issue.sampleElements) {
+          parsedSample = JSON.parse(issue.sampleElements);
+        }
+      } catch (e) {
+        console.error("Failed to parse sample elements for issue:", issue.id, e);
+      }
+
+      return {
+        id: issue.id,
+        severity: issue.severity.toLowerCase() as "critical" | "serious" | "moderate" | "minor",
+        category: issue.category.toLowerCase() as "accessibility" | "ux_heuristic" | "design_quality" | "custom_rule",
+        elementSelector: issue.elementSelector,
+        description: issue.description,
+        fixSuggestion: issue.fixSuggestion || "",
+        fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff as string) as FixDiff : null,
+        verifiedFixStatus: issue.verifiedFixStatus.toLowerCase() as "pending" | "success" | "failed" | "not_applicable",
+        source: issue.source.toLowerCase() as "deterministic" | "llm" | "merged" | "axe-core" | "custom_heuristic",
+        confidence: (issue.confidence || "MEDIUM").toLowerCase() as "high" | "medium" | "low",
+        actualValue: issue.actualValue || "",
+        expectedValue: issue.expectedValue || "",
+        viewport: issue.viewport || "",
+        ruleId: issue.ruleId || "",
+        pageUrl: issue.pageUrl || "",
+        sampleElements: parsedSample,
+      };
+    });
 
     const chatHistory = auditRun.chatMessages.map(msg => ({
       id: msg.id,
@@ -60,7 +76,9 @@ export async function POST(
         citedIssueIds: h.citedIssueIds
       })),
       issues,
-      message
+      message,
+      auditRun.score,
+      selectedIssueId || null
     );
 
     await prisma.$transaction([
@@ -85,6 +103,7 @@ export async function POST(
     return NextResponse.json({
       response: result.response,
       citedIssueIds: result.citedIssueIds,
+      suggestedFollowUps: result.suggestedFollowUps || [],
     });
   } catch (error) {
     console.error("Chat error:", error);
