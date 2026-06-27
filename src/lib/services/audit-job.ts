@@ -131,6 +131,13 @@ export async function executeAuditJob(auditRunId: string, url: string) {
             fixDiff: issue.fixDiff ? JSON.stringify(issue.fixDiff) : null,
             verifiedFixStatus: issue.verifiedFixStatus.toUpperCase(),
             source: issue.source.toUpperCase(),
+            confidence: issue.confidence ? issue.confidence.toUpperCase() : "MEDIUM",
+            actualValue: issue.actualValue || null,
+            expectedValue: issue.expectedValue || null,
+            viewport: issue.viewport || null,
+            ruleId: issue.ruleId || null,
+            sampleElements: issue.sampleElements ? JSON.stringify(issue.sampleElements) : null,
+            pageUrl: issue.pageUrl || null,
           },
         });
       }

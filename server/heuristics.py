@@ -111,14 +111,52 @@ class HeuristicsAuditor:
         tap_target_violations = []
         try:
             res = await page.evaluate("""() => {
-                const interactive = Array.from(document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"]'));
+                const elements = Array.from(document.querySelectorAll('*'));
                 const violations = [];
-                interactive.forEach(el => {
+                
+                const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+                const isMobile = viewportWidth < 768 || window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+                
+                const ctaRegex = /(sign\\s*up|register|create\\s*account|join|log\\s*in|sign\\s*in|login|checkout|buy|purchase|pricing|get\\s*started)/i;
+
+                elements.forEach(el => {
+                    const tagName = el.tagName.toLowerCase();
+                    
+                    let isInteractive = false;
+                    
+                    if (tagName === 'button') {
+                        isInteractive = true;
+                    } else if (tagName === 'a') {
+                        if (el.hasAttribute('href')) {
+                            isInteractive = true;
+                        }
+                    } else if (['input', 'select', 'textarea'].includes(tagName)) {
+                        const type = (el.getAttribute('type') || '').toLowerCase();
+                        if (!['hidden', 'submit', 'reset'].includes(type)) {
+                            isInteractive = true;
+                        }
+                    }
+                    
+                    const role = (el.getAttribute('role') || '').toLowerCase();
+                    if (role === 'button' || role === 'link') {
+                        isInteractive = true;
+                    }
+                    
+                    if (el.hasAttribute('onclick') || el.onclick) {
+                        isInteractive = true;
+                    }
+                    
+                    const style = window.getComputedStyle(el);
+                    if (style.cursor === 'pointer') {
+                        isInteractive = true;
+                    }
+                    
+                    if (!isInteractive) return;
+                    
                     const rect = el.getBoundingClientRect();
                     if (rect.width === 0 || rect.height === 0) return;
                     
-                    const style = window.getComputedStyle(el);
-                    if (style.display === 'inline' && el.tagName === 'A') {
+                    if (style.display === 'inline' && tagName === 'a') {
                         const parent = el.parentElement;
                         if (parent && parent.innerText.trim().length > el.innerText.trim().length * 2) {
                             return; // skip inline text links
@@ -126,18 +164,27 @@ class HeuristicsAuditor:
                     }
                     
                     if (rect.width < 44 || rect.height < 44) {
-                        const selector = el.tagName.toLowerCase() + 
+                        const text = el.innerText.trim();
+                        const isPrimaryCTA = ctaRegex.test(text) || (el.className && (el.className.includes('cta') || el.className.includes('primary') || el.className.includes('btn-primary')));
+                        const isFormControl = ['input', 'select', 'textarea'].includes(tagName);
+                        
+                        const selector = tagName + 
                             (el.id ? '#' + el.id : '') + 
                             (el.className ? '.' + el.className.split(' ').filter(c => c && !c.includes(':')).slice(0, 3).join('.') : '');
+                        
                         violations.push({
                             selector: selector,
                             width: Math.round(rect.width),
                             height: Math.round(rect.height),
-                            text: el.innerText.trim().substring(0, 50)
+                            text: text.substring(0, 50),
+                            isMobile: isMobile,
+                            isPrimaryCTA: isPrimaryCTA,
+                            isFormControl: isFormControl,
+                            viewport: isMobile ? "mobile" : "desktop"
                         });
                     }
                 });
-                return violations.slice(0, 15); // limit to top 15
+                return violations.slice(0, 50); // limit to top 50 to allow grouping
             }""")
             if res:
                 tap_target_violations = json.loads(res) if isinstance(res, str) else res

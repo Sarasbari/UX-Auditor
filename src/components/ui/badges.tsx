@@ -59,20 +59,53 @@ interface SourceBadgeProps {
 
 export function SourceBadge({ source, className }: SourceBadgeProps) {
   const colors: Record<string, string> = {
-    deterministic: "bg-blue-100 text-blue-800",
-    llm: "bg-purple-100 text-purple-800",
-    merged: "bg-indigo-100 text-indigo-800",
+    "axe-core": "bg-blue-100 text-blue-800 border border-blue-200",
+    "custom_heuristic": "bg-teal-100 text-teal-800 border border-teal-200",
+    "llm": "bg-purple-100 text-purple-800 border border-purple-200",
+    "merged": "bg-indigo-100 text-indigo-800 border border-indigo-200",
+  };
+
+  const labels: Record<string, string> = {
+    "axe-core": "WCAG / axe-core",
+    "custom_heuristic": "Custom UX Rule",
+    "llm": "AI Suggestion",
+    "merged": "Merged Findings",
   };
 
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-        colors[source] || "bg-gray-100 text-gray-600",
+        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border",
+        colors[source] || "bg-gray-100 text-gray-600 border-gray-200",
         className
       )}
     >
-      {source === "deterministic" ? "Rule" : source === "llm" ? "AI" : "Merged"}
+      {labels[source] || source}
+    </span>
+  );
+}
+
+interface ConfidenceBadgeProps {
+  confidence: string;
+  className?: string;
+}
+
+export function ConfidenceBadge({ confidence, className }: ConfidenceBadgeProps) {
+  const colors: Record<string, string> = {
+    high: "bg-green-100 text-green-800 border border-green-200",
+    medium: "bg-yellow-100 text-yellow-800 border border-yellow-200",
+    low: "bg-gray-100 text-gray-800 border border-gray-250",
+  };
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border uppercase tracking-wider",
+        colors[confidence] || "bg-gray-100 text-gray-600 border-gray-200",
+        className
+      )}
+    >
+      Conf: {confidence}
     </span>
   );
 }

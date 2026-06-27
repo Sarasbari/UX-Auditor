@@ -38,6 +38,13 @@ export async function GET(
         category: issue.category.toLowerCase(),
         verifiedFixStatus: issue.verifiedFixStatus.toLowerCase(),
         source: issue.source.toLowerCase(),
+        confidence: (issue as any).confidence ? (issue as any).confidence.toLowerCase() : "medium",
+        actualValue: (issue as any).actualValue,
+        expectedValue: (issue as any).expectedValue,
+        viewport: (issue as any).viewport,
+        ruleId: (issue as any).ruleId,
+        sampleElements: (issue as any).sampleElements ? JSON.parse((issue as any).sampleElements) : null,
+        pageUrl: (issue as any).pageUrl,
         fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff) : null,
       })),
       chatMessages: auditRun.chatMessages.map(msg => ({

@@ -77,6 +77,13 @@ model Issue {
   fixDiff           String?
   verifiedFixStatus String   @default("NOT_APPLICABLE")
   source            String
+  confidence        String   @default("MEDIUM")
+  actualValue       String?
+  expectedValue     String?
+  viewport          String?
+  ruleId            String?
+  sampleElements    String?
+  pageUrl           String?
   createdAt         DateTime @default(now())
 
   auditRun    AuditRun     @relation(fields: [auditRunId], references: [id], onDelete: Cascade)

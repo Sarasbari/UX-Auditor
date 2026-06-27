@@ -500,10 +500,35 @@ HTML_DASHBOARD = """
                 else if (issue.severity === 'serious') severityColor = "bg-orange-950/40 text-orange-400 border border-orange-900/60";
                 else if (issue.severity === 'moderate') severityColor = "bg-yellow-950/40 text-yellow-400 border border-yellow-900/60";
 
+                let sourceLabel = issue.source || "deterministic";
+                let sourceColor = "bg-blue-950/30 text-blue-300 border border-blue-900/40";
+                if (issue.source === 'axe-core') {
+                    sourceLabel = "WCAG / axe-core";
+                    sourceColor = "bg-blue-950/45 text-blue-400 border border-blue-900/60";
+                } else if (issue.source === 'custom_heuristic') {
+                    sourceLabel = "Custom UX Rule";
+                    sourceColor = "bg-teal-950/45 text-teal-400 border border-teal-900/60";
+                } else if (issue.source === 'llm') {
+                    sourceLabel = "AI Suggestion";
+                    sourceColor = "bg-purple-950/45 text-purple-400 border border-purple-900/60";
+                } else if (issue.source === 'merged') {
+                    sourceLabel = "Merged Findings";
+                    sourceColor = "bg-indigo-950/45 text-indigo-400 border border-indigo-900/60";
+                }
+
+                let confidenceColor = "bg-gray-950/40 text-gray-400 border border-gray-900";
+                let confidenceLabel = issue.confidence || "medium";
+                if (confidenceLabel === 'high') confidenceColor = "bg-green-950/45 text-green-400 border border-green-900/60";
+                else if (confidenceLabel === 'medium') confidenceColor = "bg-yellow-950/45 text-yellow-400 border border-yellow-900/60";
+
+                const isGrouped = issue.sampleElements && issue.sampleElements.length > 1;
+
                 card.innerHTML = `
-                    <div class="flex items-center space-x-2.5">
+                    <div class="flex items-center space-x-2.5 flex-wrap gap-y-1">
                         <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${severityColor}">${issue.severity}</span>
-                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase bg-gray-800 text-gray-400 border border-gray-750">${issue.category}</span>
+                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${sourceColor}">${sourceLabel}</span>
+                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${confidenceColor}">Conf: ${confidenceLabel}</span>
+                        ${isGrouped ? `<span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase bg-gray-900 text-purple-300 border border-purple-950">Grouped (${issue.sampleElements.length})</span>` : ''}
                         ${issue.verifiedFixStatus === 'success' ? '<span class="text-xs text-green-400 font-bold">✓ Fix Verified</span>' : ''}
                     </div>
                     <p class="text-sm text-gray-200 line-clamp-2">${issue.description}</p>
@@ -546,6 +571,73 @@ HTML_DASHBOARD = """
             else severityEl.className = "inline-block px-3 py-1 rounded-full font-bold text-xs bg-blue-950/40 text-blue-400 border border-blue-900/60";
 
             document.getElementById('modal-category').innerText = issue.category;
+            
+            // Source & Confidence & Evidence display in modal:
+            let detailSection = document.getElementById('modal-evidence-section');
+            if (!detailSection) {
+                detailSection = document.createElement('div');
+                detailSection.id = 'modal-evidence-section';
+                const selectorBlock = document.getElementById('modal-selector').parentElement;
+                selectorBlock.insertAdjacentElement('afterend', detailSection);
+            }
+            
+            let evidenceHtml = `
+                <div class="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Source</span>
+                        <span class="text-gray-300 capitalize">${issue.source || 'deterministic'}</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Confidence</span>
+                        <span class="text-gray-300 capitalize">${issue.confidence || 'medium'}</span>
+                    </div>
+                </div>
+            `;
+            if (issue.viewport) {
+                evidenceHtml += `
+                    <div class="mt-4">
+                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Viewport</span>
+                        <span class="text-gray-300 capitalize">${issue.viewport}</span>
+                    </div>
+                `;
+            }
+            if (issue.pageUrl) {
+                evidenceHtml += `
+                    <div class="mt-4">
+                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Page URL</span>
+                        <a href="${issue.pageUrl}" target="_blank" class="text-blue-400 hover:underline break-all text-xs">${issue.pageUrl}</a>
+                    </div>
+                `;
+            }
+            if (issue.actualValue) {
+                evidenceHtml += `
+                    <div class="mt-4">
+                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Evidence (Actual vs Expected)</span>
+                        <div class="bg-black/40 border border-gray-800 rounded-xl p-3 text-xs space-y-1 text-gray-300">
+                            <div><strong>Actual:</strong> ${issue.actualValue}</div>
+                            ${issue.expectedValue ? `<div><strong>Expected:</strong> ${issue.expectedValue}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            if (issue.sampleElements && issue.sampleElements.length > 0) {
+                evidenceHtml += `
+                    <div class="mt-4">
+                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-2">Affected Elements (${issue.sampleElements.length})</span>
+                        <div class="max-h-36 overflow-y-auto space-y-2 bg-black/40 border border-gray-800 rounded-xl p-2.5 text-xs font-mono text-gray-300">
+                            ${issue.sampleElements.map((el, i) => `
+                                <div class="bg-black/30 p-2 rounded border border-gray-900/60">
+                                    <span class="text-purple-450 block break-all">${el.selector}</span>
+                                    ${el.text ? `<span class="text-gray-400 font-sans block mt-0.5">Text: "${el.text}"</span>` : ''}
+                                    ${el.width || el.height ? `<span class="text-gray-450 font-sans block mt-0.5">Size: ${el.width}x${el.height}px</span>` : ''}
+                                    ${el.html ? `<pre class="text-[10px] text-gray-500 mt-1 border-t border-gray-900 pt-1 overflow-x-auto whitespace-pre-wrap break-all">${el.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            detailSection.innerHTML = evidenceHtml;
             
             // Set code diffs
             if (issue.fixDiff && issue.fixDiff.original && issue.fixDiff.patched) {

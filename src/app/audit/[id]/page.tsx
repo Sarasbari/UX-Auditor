@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { SeverityBadge, FixBadge, SourceBadge, ScoreDisplay, StatusIndicator } from "@/components/ui/badges";
+import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator } from "@/components/ui/badges";
 
 interface Issue {
   id: string;
@@ -14,6 +14,13 @@ interface Issue {
   fixDiff: Record<string, unknown> | null;
   verifiedFixStatus: string;
   source: string;
+  confidence: string;
+  actualValue?: string | null;
+  expectedValue?: string | null;
+  viewport?: string | null;
+  ruleId?: string | null;
+  sampleElements?: Array<{ selector: string; text?: string; width?: number; height?: number; html?: string; url?: string }> | null;
+  pageUrl?: string | null;
 }
 
 interface AuditData {
@@ -318,14 +325,20 @@ export default function AuditPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <SeverityBadge severity={issue.severity} />
                         <SourceBadge source={issue.source} />
+                        <ConfidenceBadge confidence={issue.confidence} />
                         <FixBadge status={issue.verifiedFixStatus} />
+                        {issue.sampleElements && issue.sampleElements.length > 1 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-755 border border-indigo-150">
+                            Grouped ({issue.sampleElements.length})
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-900 line-clamp-2">{issue.description}</p>
                       {issue.elementSelector && (
-                        <code className="text-xs text-gray-500 mt-1 block">{issue.elementSelector}</code>
+                        <code className="text-xs text-gray-500 mt-1 block truncate font-mono">{issue.elementSelector}</code>
                       )}
                     </div>
                   </div>
@@ -352,31 +365,68 @@ export default function AuditPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 uppercase">Source</label>
-                    <div className="mt-1">
+                    <label className="text-xs text-gray-500 uppercase">Source &amp; Confidence</label>
+                    <div className="mt-1 flex gap-2">
                       <SourceBadge source={selectedIssue.source} />
+                      <ConfidenceBadge confidence={selectedIssue.confidence} />
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 uppercase">Fix Status</label>
-                    <div className="mt-1">
-                      <FixBadge status={selectedIssue.verifiedFixStatus} />
+                  {selectedIssue.viewport && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase">Viewport</label>
+                      <span className="mt-0.5 block text-sm font-semibold capitalize text-gray-700">{selectedIssue.viewport}</span>
                     </div>
-                  </div>
+                  )}
+                  {selectedIssue.pageUrl && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase">Page URL</label>
+                      <a href={selectedIssue.pageUrl} target="_blank" rel="noreferrer" className="mt-0.5 block text-xs text-blue-600 hover:underline break-all">
+                        {selectedIssue.pageUrl}
+                      </a>
+                    </div>
+                  )}
+                  {selectedIssue.actualValue && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase">Evidence (Actual vs Expected)</label>
+                      <div className="mt-1 text-sm bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1 text-gray-750">
+                        <div><strong className="text-gray-700">Actual:</strong> {selectedIssue.actualValue}</div>
+                        {selectedIssue.expectedValue && <div><strong className="text-gray-700">Expected:</strong> {selectedIssue.expectedValue}</div>}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="text-xs text-gray-500 uppercase">Description</label>
-                    <p className="mt-1 text-sm">{selectedIssue.description}</p>
+                    <p className="mt-1 text-sm text-gray-750 leading-relaxed">{selectedIssue.description}</p>
                   </div>
                   {selectedIssue.elementSelector && (
                     <div>
-                      <label className="text-xs text-gray-500 uppercase">Element</label>
-                      <code className="mt-1 block text-xs bg-gray-100 p-2 rounded">{selectedIssue.elementSelector}</code>
+                      <label className="text-xs text-gray-500 uppercase">Selector / Class Pattern</label>
+                      <code className="mt-1 block text-xs bg-gray-100 p-2.5 rounded font-mono break-all text-purple-700">{selectedIssue.elementSelector}</code>
+                    </div>
+                  )}
+                  {selectedIssue.sampleElements && selectedIssue.sampleElements.length > 0 && (
+                    <div>
+                      <label className="text-xs text-gray-500 uppercase font-semibold">
+                        Affected Elements ({selectedIssue.sampleElements.length})
+                      </label>
+                      <div className="mt-1 max-h-40 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-2 bg-gray-50">
+                        {selectedIssue.sampleElements.map((el, i) => (
+                          <div key={i} className="text-xs font-mono bg-white p-2 border border-gray-150 rounded shadow-sm">
+                            <span className="text-purple-650 block break-all">{el.selector}</span>
+                            {el.text && <span className="text-gray-500 block mt-0.5 font-sans">Text: "{el.text}"</span>}
+                            {(el.width || el.height) && (
+                              <span className="text-gray-505 block mt-0.5 font-sans">Measured Size: {el.width}x{el.height}px</span>
+                            )}
+                            {el.html && <pre className="text-[10px] text-gray-500 bg-gray-50 p-1 mt-1 border border-gray-100 rounded overflow-x-auto whitespace-pre-wrap break-all">{el.html}</pre>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {selectedIssue.fixSuggestion && (
                     <div>
-                      <label className="text-xs text-gray-500 uppercase">Suggested Fix</label>
-                      <p className="mt-1 text-sm text-gray-700">{selectedIssue.fixSuggestion}</p>
+                      <label className="text-xs text-gray-500 uppercase font-semibold">Suggested Fix</label>
+                      <p className="mt-1 text-sm text-gray-700 bg-blue-50/30 border border-blue-100 rounded-lg p-3 leading-relaxed">{selectedIssue.fixSuggestion}</p>
                     </div>
                   )}
                   {selectedIssue.fixDiff && (
