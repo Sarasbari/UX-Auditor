@@ -83,3 +83,74 @@ export interface AuditJobData {
   url: string;
   userId: string;
 }
+
+// ── GitHub Remediation Types ─────────────────────────────────────────────────
+
+export interface GitHubRepoInfo {
+  id: number;
+  name: string;
+  fullName: string;
+  owner: string;
+  private: boolean;
+  defaultBranch: string;
+}
+
+export interface GitHubBranchInfo {
+  name: string;
+  protected: boolean;
+}
+
+export interface RemediationRequest {
+  repo: string;
+  baseBranch: string;
+  issueIds: string[];
+  mode: "safe" | "direct_if_possible";
+}
+
+export interface RemediationResponse {
+  prUrl: string;
+  prNumber: number;
+  branchName: string;
+  commitSha: string;
+  includedIssues: string[];
+  skippedIssues: Array<{ id: string; reason: string }>;
+  patchedResults?: Array<{
+    issueId: string;
+    ruleId: string;
+    filePath: string;
+    originalSnippet: string;
+    patchedSnippet: string;
+    explanation: string;
+    success: boolean;
+    error?: string;
+  }>;
+}
+
+export interface PatchPlanItem {
+  issueId: string;
+  ruleId: string | null;
+  targetFile: string | null;
+  confidence: "high" | "medium" | "low";
+  action: "direct_patch_ready" | "report_only";
+  reason: string;
+}
+
+export interface UpgradedRemediationPlan {
+  framework: string;
+  usesTailwind: boolean;
+  candidateFiles: string[];
+  confidence: string;
+  patches: PatchPlanItem[];
+}
+
+export type RemediationStep =
+  | "connecting"
+  | "loading_repos"
+  | "loading_plan"
+  | "creating_branch"
+  | "committing"
+  | "opening_pr"
+  | "complete"
+  | "error";
+
+

@@ -15,6 +15,11 @@ export const {
     GitHubProvider({
       clientId: process.env.GITHUB_ID,
       clientSecret: process.env.GITHUB_SECRET,
+      authorization: {
+        params: {
+          scope: "repo read:user user:email",
+        },
+      },
     }),
     GoogleProvider({
       clientId: process.env.GOOGLE_ID,
@@ -88,6 +93,14 @@ export const {
               });
             }
             token.id = dbUser.id;
+
+            // Persist GitHub access token to DB (never to JWT/session/client)
+            if (account.provider === "github" && account.access_token) {
+              await prisma.user.update({
+                where: { id: dbUser.id },
+                data: { githubAccessToken: account.access_token },
+              });
+            }
           }
         } else {
           token.id = user.id;
@@ -106,3 +119,4 @@ export const {
     signIn: "/login",
   },
 });
+

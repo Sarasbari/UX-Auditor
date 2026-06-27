@@ -24,13 +24,15 @@ model User {
   email            String   @unique
   name             String?
   passwordHash     String?
+  githubAccessToken String?
   subscriptionTier String   @default("FREE")
   stripeCustomerId String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  projects  Project[]
-  auditRuns AuditRun[] @relation("UserAuditRuns")
+  projects      Project[]
+  auditRuns     AuditRun[]          @relation("UserAuditRuns")
+  remediations  GitHubRemediation[]
 }
 
 model Project {
@@ -58,12 +60,13 @@ model AuditRun {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user         User          @relation("UserAuditRuns", fields: [userId], references: [id], onDelete: Cascade)
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User                @relation("UserAuditRuns", fields: [userId], references: [id], onDelete: Cascade)
   issues       Issue[]
   screenshots  Screenshot[]
   domSnapshot  DOMSnapshot?
   chatMessages ChatMessage[]
+  remediations GitHubRemediation[]
 }
 
 model Issue {
@@ -120,4 +123,24 @@ model ChatMessage {
   createdAt     DateTime @default(now())
 
   auditRun AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+}
+
+// GitHubRemediation: PENDING | IN_PROGRESS | COMPLETED | FAILED
+model GitHubRemediation {
+  id               String   @id @default(uuid())
+  auditRunId       String
+  userId           String
+  repoFullName     String
+  baseBranch       String
+  headBranch       String
+  prUrl            String?
+  prNumber         Int?
+  status           String   @default("PENDING")
+  selectedIssueIds String   @default("[]")
+  includedIssueIds String   @default("[]")
+  skippedIssueIds  String   @default("[]")
+  createdAt        DateTime @default(now())
+
+  auditRun AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

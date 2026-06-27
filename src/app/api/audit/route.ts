@@ -12,6 +12,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
+    // Verify user exists in the database to prevent foreign key errors if the DB was reset
+    const userExists = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!userExists) {
+      return NextResponse.json({ error: "User not found. Please log out and log in again." }, { status: 401 });
+    }
+
     const body = await request.json();
     const { url } = body;
 
