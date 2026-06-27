@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { chatWithAuditReport } from "@/lib/engines/llm/chat";
+import { prisma } from "@/lib/db/prisma";
 import type { FixDiff } from "@/types";
+import { chatWithAuditReport } from "@/lib/services/chat";
 
 export async function POST(
   request: NextRequest,
@@ -52,17 +52,16 @@ export async function POST(
       createdAt: msg.createdAt.toISOString(),
     }));
 
-    const apiRes = await fetch("http://localhost:8000/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audit_id: id, message: message })
-    });
-
-    if (!apiRes.ok) {
-      throw new Error(`FastAPI chat failed: ${apiRes.statusText}`);
-    }
-
-    const result = await apiRes.json();
+    const result = await chatWithAuditReport(
+      chatHistory.map(h => ({
+        id: h.id,
+        role: h.role as "user" | "assistant",
+        content: h.content,
+        citedIssueIds: h.citedIssueIds
+      })),
+      issues,
+      message
+    );
 
     await prisma.$transaction([
       prisma.chatMessage.create({

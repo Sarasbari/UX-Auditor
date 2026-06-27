@@ -1,8 +1,8 @@
-import { captureAndAnalyze } from "../engines/deterministic/capture";
-import { runImpeccableAnalysis } from "../engines/deterministic/impeccable-rules";
-import { analyzeWithLLM } from "../engines/llm/heuristic";
-import { mergeFindings, calculateOverallScore } from "../engines/merge/merge";
-import { applyAndVerifyFixes, generateCodePatch } from "../engines/fix/verified-fix";
+import { captureAndAnalyze } from "./engines/deterministic/capture";
+import { runImpeccableAnalysis } from "./engines/deterministic/impeccable-rules";
+import { analyzeWithLLM } from "./engines/llm/heuristic";
+import { mergeFindings, calculateOverallScore } from "./engines/merge/merge";
+import { applyAndVerifyFixes, generateCodePatch } from "./engines/fix/verified-fix";
 import type { DeterministicFinding, MergedIssue } from "@/types";
 
 export interface AuditResult {

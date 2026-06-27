@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/db/prisma";
 
 export async function GET(
   request: NextRequest,
@@ -31,6 +31,7 @@ export async function GET(
     const response = {
       ...auditRun,
       status: auditRun.status.toLowerCase(),
+      errorMessage: auditRun.errorMessage,
       issues: auditRun.issues.map(issue => ({
         ...issue,
         severity: issue.severity.toLowerCase(),

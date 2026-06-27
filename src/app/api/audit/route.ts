@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/services/auth";
+import { prisma } from "@/lib/db/prisma";
+import { executeAuditJob } from "@/lib/services/audit-job";
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    startAuditJob(auditRun.id, parsedUrl.href);
+    // Fire-and-forget: the service module guarantees a terminal status.
+    executeAuditJob(auditRun.id, parsedUrl.href);
 
     return NextResponse.json({
       id: auditRun.id,
@@ -63,81 +65,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Audit submission error:", error);
     return NextResponse.json({ error: "Failed to submit audit" }, { status: 500 });
-  }
-}
-
-async function startAuditJob(auditRunId: string, url: string) {
-  try {
-    await prisma.auditRun.update({
-      where: { id: auditRunId },
-      data: { status: "PROCESSING", startedAt: new Date() },
-    });
-
-    const apiRes = await fetch("http://localhost:8000/audit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url, audit_id: auditRunId })
-    });
-
-    if (!apiRes.ok) {
-      throw new Error(`FastAPI audit submission failed: ${apiRes.statusText}`);
-    }
-
-    let status = "queued";
-    let reportData: any = null;
-
-    while (status === "queued" || status === "processing") {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      try {
-        const pollRes = await fetch(`http://localhost:8000/report/${auditRunId}`);
-        if (pollRes.ok) {
-          reportData = await pollRes.json();
-          status = reportData.status;
-        } else {
-          console.error(`Polling failed: ${pollRes.statusText}`);
-        }
-      } catch (pollErr) {
-        console.error("Polling fetch error:", pollErr);
-      }
-    }
-
-    if (status === "failed" || !reportData) {
-      throw new Error("Audit failed in Python backend agent");
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.auditRun.update({
-        where: { id: auditRunId },
-        data: {
-          status: "COMPLETED",
-          score: reportData.score,
-          completedAt: new Date(),
-        },
-      });
-
-      for (const issue of reportData.issues) {
-        await tx.issue.create({
-          data: {
-            id: issue.id,
-            auditRunId,
-            severity: issue.severity.toUpperCase() as "CRITICAL" | "SERIOUS" | "MODERATE" | "MINOR",
-            category: issue.category.toUpperCase() as "ACCESSIBILITY" | "UX_HEURISTIC" | "DESIGN_QUALITY" | "CUSTOM_RULE",
-            elementSelector: issue.elementSelector,
-            description: issue.description,
-            fixSuggestion: issue.fixSuggestion,
-            fixDiff: issue.fixDiff ? JSON.stringify(issue.fixDiff) : null,
-            verifiedFixStatus: issue.verifiedFixStatus.toUpperCase() as "PENDING" | "SUCCESS" | "FAILED" | "NOT_APPLICABLE",
-            source: issue.source.toUpperCase() as "DETERMINISTIC" | "LLM" | "MERGED",
-          },
-        });
-      }
-    });
-  } catch (error) {
-    console.error("Audit job failed:", error);
-    await prisma.auditRun.update({
-      where: { id: auditRunId },
-      data: { status: "FAILED" },
-    });
   }
 }
 

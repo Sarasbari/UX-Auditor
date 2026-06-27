@@ -1,5 +1,9 @@
 # UX-Auditor Agentic Architecture Design Document (AADD) v2.0
 
+> [!NOTE]
+> **Historical Archive / Design Roadmap Only**
+> This document refers to the historical system requirements. For details on the actual MVP implementation, architecture, and dev setup, please consult [CURRENT_ARCHITECTURE.md](file:///c:/coding/UX-Auditor/docs/CURRENT_ARCHITECTURE.md) and the root [README.md](file:///c:/coding/UX-Auditor/README.md).
+
 **Status**: Approved & Ready for Implementation  
 **Author**: Principal Software Architect, Antigravity AI  
 **Target Version**: Production MVP v2.0  

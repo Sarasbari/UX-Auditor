@@ -20,6 +20,7 @@ interface AuditData {
   id: string;
   url: string;
   status: string;
+  errorMessage: string | null;
   score: number | null;
   issues: Issue[];
   chatMessages: ChatMessage[];
@@ -44,23 +45,41 @@ export default function AuditPage() {
   const [filter, setFilter] = useState<string>("all");
 
   useEffect(() => {
+    let active = true;
+    let timerId: NodeJS.Timeout;
+
     const fetchAudit = async () => {
       try {
         const response = await fetch(`/api/audit/${params.id}`);
+        if (!active) return;
         if (response.ok) {
           const data = await response.json();
           setAudit(data);
+          
+          // Stop polling if we reached a terminal status
+          if (data.status === "completed" || data.status === "failed") {
+            setLoading(false);
+            return;
+          }
         }
       } catch (error) {
         console.error("Failed to fetch audit:", error);
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
+
+      // Schedule next poll
+      timerId = setTimeout(fetchAudit, 3000);
     };
 
     fetchAudit();
-    const interval = setInterval(fetchAudit, 3000);
-    return () => clearInterval(interval);
+
+    return () => {
+      active = false;
+      clearTimeout(timerId);
+    };
   }, [params.id]);
 
   const handleChat = async (e: React.FormEvent) => {
@@ -96,7 +115,7 @@ export default function AuditPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
           <p className="text-gray-600">Loading audit...</p>
@@ -107,8 +126,117 @@ export default function AuditPage() {
 
   if (!audit) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <p className="text-gray-600">Audit not found</p>
+      </div>
+    );
+  }
+
+  // ── FAILURE STATE ──────────────────────────────────────────────────────────
+  if (audit.status === "failed") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <nav className="border-b bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16 items-center">
+              <a href="/" className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">UX</span>
+                </div>
+                <span className="font-semibold">UX-Auditor</span>
+              </a>
+              <span className="text-sm text-red-650 font-semibold uppercase tracking-wider">Audit Failed</span>
+            </div>
+          </div>
+        </nav>
+
+        <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-16 flex flex-col items-center justify-center text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
+            <svg className="w-8 h-8 text-red-650" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Audit Execution Failed</h1>
+          <p className="text-gray-500 mb-8 max-w-md">
+            We ran into an issue while analyzing <span className="font-medium text-gray-700 break-all">{audit.url}</span>.
+          </p>
+          <div className="w-full bg-white rounded-xl p-6 shadow-sm border border-red-100 text-left mb-8">
+            <h2 className="text-xs font-semibold uppercase text-red-800 tracking-wider mb-2">Error Details</h2>
+            <p className="font-mono text-xs text-gray-700 whitespace-pre-wrap break-all bg-gray-50 p-4 rounded-lg border border-gray-150">
+              {audit.errorMessage || "An unknown error occurred during the audit execution."}
+            </p>
+          </div>
+          <a
+            href="/"
+            className="inline-flex items-center px-5 py-2.5 bg-blue-605 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition active:scale-95 duration-150"
+          >
+            ← Try Another URL
+          </a>
+        </main>
+      </div>
+    );
+  }
+
+  // ── IN-PROGRESS STATE ──────────────────────────────────────────────────────
+  if (audit.status !== "completed") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <nav className="border-b bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16 items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">UX</span>
+                </div>
+                <span className="font-semibold">UX-Auditor</span>
+              </div>
+              <StatusIndicator status={audit.status} />
+            </div>
+          </div>
+        </nav>
+
+        <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-24 text-center flex flex-col items-center justify-center">
+          <div className="relative w-20 h-20 mb-8">
+            <div className="absolute inset-0 rounded-full border-4 border-blue-100" />
+            <div className="absolute inset-0 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+          </div>
+          
+          <h1 className="text-2xl font-extrabold text-gray-900 mb-2">
+            Analyzing Site Architecture
+          </h1>
+          <p className="text-gray-500 mb-8 break-all max-w-lg">
+            Auditing <span className="font-medium text-gray-700">{audit.url}</span>
+          </p>
+
+          <div className="w-full bg-white rounded-2xl p-6 shadow-sm border text-left max-w-md">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Current Status</h2>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                  audit.status === "queued" ? "bg-blue-100 text-blue-700 animate-pulse" : "bg-green-100 text-green-700"
+                }`}>
+                  {audit.status === "queued" ? "⏳" : "✓"}
+                </div>
+                <span className={`text-sm ${audit.status === "queued" ? "font-semibold text-gray-900" : "text-gray-500"}`}>
+                  Queued in system
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                  audit.status === "queued" ? "bg-gray-100 text-gray-400" :
+                  audit.status === "processing" ? "bg-blue-100 text-blue-700 animate-pulse" : "bg-green-100 text-green-700"
+                }`}>
+                  {audit.status === "queued" ? "•" : audit.status === "processing" ? "⏳" : "✓"}
+                </div>
+                <span className={`text-sm ${
+                  audit.status === "processing" ? "font-semibold text-gray-900" : "text-gray-500"
+                }`}>
+                  Running axe-core & custom heuristic rules
+                </span>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }

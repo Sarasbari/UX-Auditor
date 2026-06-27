@@ -1,5 +1,9 @@
 # UX-Auditor Product Requirements Document (PRD)
 
+> [!NOTE]
+> **Historical Archive / Design Roadmap Only**
+> This document refers to the historical system requirements. For details on the actual MVP implementation, architecture, and dev setup, please consult [CURRENT_ARCHITECTURE.md](file:///c:/coding/UX-Auditor/docs/CURRENT_ARCHITECTURE.md) and the root [README.md](file:///c:/coding/UX-Auditor/README.md).
+
 **Document Version**: 1.0
 **Date**: June 27, 2026
 **Author**: Manus AI
