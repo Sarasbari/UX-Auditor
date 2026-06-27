@@ -63,6 +63,8 @@ export function SourceBadge({ source, className }: SourceBadgeProps) {
     "custom_heuristic": "bg-teal-100 text-teal-800 border border-teal-200",
     "llm": "bg-purple-100 text-purple-800 border border-purple-200",
     "merged": "bg-indigo-100 text-indigo-800 border border-indigo-200",
+    "screenshot_vision": "bg-amber-100 text-amber-800 border border-amber-200",
+    "screenshot-vision": "bg-amber-100 text-amber-800 border border-amber-200",
   };
 
   const labels: Record<string, string> = {
@@ -70,6 +72,8 @@ export function SourceBadge({ source, className }: SourceBadgeProps) {
     "custom_heuristic": "Custom UX Rule",
     "llm": "AI Suggestion",
     "merged": "Merged Findings",
+    "screenshot_vision": "Screenshot Vision",
+    "screenshot-vision": "Screenshot Vision",
   };
 
   return (

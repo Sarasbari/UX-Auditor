@@ -48,17 +48,19 @@ model Project {
 }
 
 model AuditRun {
-  id           String    @id @default(uuid())
-  projectId    String
-  userId       String
-  status       String    @default("QUEUED")
-  url          String
-  score        Int?
-  errorMessage String?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  projectId        String
+  userId           String
+  status           String    @default("QUEUED")
+  url              String
+  inputType        String    @default("URL")
+  uploadedImageUrl String?
+  score            Int?
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user         User                @relation("UserAuditRuns", fields: [userId], references: [id], onDelete: Cascade)

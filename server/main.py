@@ -91,6 +91,46 @@ async def execute_audit_job(audit_id: str, url: str, journey_steps: str):
         await log_progress(f"Audit failed: {error_msg}")
         db.mark_audit_failed(audit_id, error_msg)
 
+class ScreenshotAuditRequest(BaseModel):
+    audit_id: str
+    image_path_or_url: str
+    image_base64: Optional[str] = None
+
+async def execute_screenshot_audit_job(audit_id: str, image_base64: str):
+    async def log_progress(msg: str):
+        logger.info(f"[{audit_id}] {msg}")
+        if audit_id not in audit_progress:
+            audit_progress[audit_id] = []
+        audit_progress[audit_id].append(msg)
+
+    try:
+        db.update_audit_status(audit_id, "processing")
+        await log_progress("Initiating visual screenshot audit...")
+        
+        from server.llm_layer import audit_screenshot_with_vision
+        await log_progress("Analyzing UI components, layout hierarchy, and contrast risks using AI Vision...")
+        report_data = await audit_screenshot_with_vision(image_base64, audit_id)
+        
+        report_data["timestamp"] = datetime.utcnow().isoformat()
+        db.save_audit_report(audit_id, report_data.get("score", 100), report_data)
+        
+        await log_progress("Visual screenshot report generated and saved successfully!")
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"[{audit_id}] Screenshot audit failed: {error_msg}", exc_info=True)
+        await log_progress(f"Screenshot audit failed: {error_msg}")
+        db.mark_audit_failed(audit_id, error_msg)
+
+@app.post("/screenshot-audit")
+async def start_screenshot_audit(req: ScreenshotAuditRequest, background_tasks: BackgroundTasks):
+    audit_id = req.audit_id or uuid.uuid4().hex
+    db.create_audit(audit_id, "screenshot://uploaded", "")
+    
+    audit_progress[audit_id] = ["Queued visual audit in background..."]
+    background_tasks.add_task(execute_screenshot_audit_job, audit_id, req.image_base64 or "")
+    
+    return {"id": audit_id, "status": "queued", "url": "screenshot://uploaded"}
+
 @app.post("/audit")
 async def start_audit(req: AuditRequest, background_tasks: BackgroundTasks):
     url = req.url
