@@ -22,6 +22,12 @@ class MissionSchema(BaseModel):
     current_task: Optional[str] = None
     constraints: List[str] = Field(default_factory=list)
     
+    # Mission Timeline (Sprint 6)
+    timeline: List[str] = Field(
+        default_factory=list,
+        description="Records high-level mission phases e.g., Planning, Execution, Browser Capture..."
+    )
+    
     # Audit state
     findings: List[Issue] = Field(default_factory=list)
     evidence: List[Evidence] = Field(default_factory=list)
@@ -29,9 +35,21 @@ class MissionSchema(BaseModel):
     # Patch tracking
     generated_patches: List[Dict[str, Any]] = Field(default_factory=list)
     verified_patches: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_results: List[Dict[str, Any]] = Field(default_factory=list)
+    patch_history: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Lightweight audit trail of patch verifications."
+    )
     
     # Diagnostics
-    mission_metrics: Dict[str, Any] = Field(default_factory=dict)
+    mission_metrics: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "mission_duration_ms": 0,
+            "tasks_completed": 0,
+            "verified_patches": 0,
+            "issues_resolved": 0
+        }
+    )
     logs: List[str] = Field(default_factory=list)
     
     created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -24,3 +24,11 @@ class AgentCapability(str, Enum):
     CAPTURE_BROWSER = "capture_browser"
     ANALYZE_ACCESSIBILITY = "analyze_accessibility"
     ANALYZE_HEURISTICS = "analyze_heuristics"
+
+    # Sprint 5 capabilities
+    GENERATE_PATCH = "generate_patch"
+    VERIFY_PATCH = "verify_patch"
+
+    # Sprint 6 capabilities
+    GENERATE_REPORT = "generate_report"
+    CONVERSE = "converse"
