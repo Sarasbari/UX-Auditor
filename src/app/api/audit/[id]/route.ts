@@ -75,6 +75,15 @@ export async function GET(
         sampleElements: (issue as any).sampleElements ? JSON.parse((issue as any).sampleElements) : null,
         pageUrl: (issue as any).pageUrl,
         fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff) : null,
+        boundingBox: (() => {
+          if (!issue.boundingBox) return null;
+          try {
+            return JSON.parse(issue.boundingBox);
+          } catch {
+            return null;
+          }
+        })(),
+        scoreDelta: issue.scoreDelta,
         screenshots: issue.screenshots,
       })),
       chatMessages: auditRun.chatMessages.map(msg => ({

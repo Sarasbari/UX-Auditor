@@ -79,3 +79,8 @@ venv/
 ENV/
 env/
 
+# Local uploads
+public/uploads/
+
+# Experimental / Scratch files
+scratch/

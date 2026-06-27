@@ -294,6 +294,8 @@ export async function executeScreenshotAuditJob(auditRunId: string, imageUrl: st
             ruleId: issue.ruleId || null,
             sampleElements: issue.sampleElements ? JSON.stringify(issue.sampleElements) : null,
             pageUrl: issue.pageUrl || null,
+            boundingBox: issue.boundingBox ? JSON.stringify(issue.boundingBox) : null,
+            scoreDelta: typeof issue.scoreDelta === "number" ? issue.scoreDelta : null,
           },
         });
       }

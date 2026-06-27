@@ -23,6 +23,14 @@ interface Issue {
   ruleId?: string | null;
   sampleElements?: Array<{ selector: string; text?: string; width?: number; height?: number; html?: string; url?: string }> | null;
   pageUrl?: string | null;
+  boundingBox?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    label?: string;
+  } | null;
+  scoreDelta?: number | null;
   screenshots?: Array<{ id: string; url: string; type: string }> | null;
 }
 
@@ -38,6 +46,7 @@ interface AuditData {
   completedAt: string | null;
   progress?: string[];
   inputType?: string;
+  uploadedImageUrl?: string | null;
 }
 
 interface ChatMessage {
@@ -915,6 +924,118 @@ export default function AuditPage() {
         <div id="issues-list-section" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── LEFT COLUMN: ISSUES LIST ── */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Heatmap-style screenshot markup (Screenshot Audits only) */}
+            {audit.inputType === "SCREENSHOT" && audit.uploadedImageUrl && (() => {
+              const issuesWithCoordinates = audit.issues.filter(issue => issue.boundingBox);
+              
+              const severityOverlayStyles: Record<string, { border: string; bg: string; marker: string; hex: string }> = {
+                critical: {
+                  border: "border-red-500 hover:border-red-600",
+                  bg: "bg-red-500",
+                  marker: "bg-red-600",
+                  hex: "rgba(239, 68, 68, 0.15)"
+                },
+                serious: {
+                  border: "border-orange-500 hover:border-orange-600",
+                  bg: "bg-orange-500",
+                  marker: "bg-orange-600",
+                  hex: "rgba(249, 115, 22, 0.15)"
+                },
+                moderate: {
+                  border: "border-amber-500 hover:border-amber-600",
+                  bg: "bg-amber-500",
+                  marker: "bg-amber-600",
+                  hex: "rgba(245, 158, 11, 0.15)"
+                },
+                minor: {
+                  border: "border-blue-500 hover:border-blue-600",
+                  bg: "bg-blue-500",
+                  marker: "bg-blue-600",
+                  hex: "rgba(59, 130, 246, 0.15)"
+                }
+              };
+
+              return (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-150 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-gray-100">
+                    <div>
+                      <h2 className="font-bold text-gray-900 flex items-center gap-2 text-base">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.43 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                        </svg>
+                        UI Visual Heatmap
+                      </h2>
+                      <p className="text-xs text-gray-400 font-medium font-sans mt-0.5">
+                        Visual markers are approximate and based on screenshot analysis.
+                      </p>
+                    </div>
+                    
+                    {/* Visual Legend */}
+                    <div className="flex items-center gap-3 text-[11px] font-bold text-gray-600">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" />Critical</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" />Serious</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" />Moderate</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />Minor</span>
+                    </div>
+                  </div>
+
+                  {issuesWithCoordinates.length === 0 ? (
+                    <div className="bg-gray-50 border border-gray-150 border-dashed rounded-xl p-6 text-center">
+                      <p className="text-gray-500 text-sm font-sans">No precise regions detected. Showing issue list below.</p>
+                    </div>
+                  ) : (
+                    <div className="relative border border-gray-150 rounded-xl overflow-hidden bg-gray-50 select-none">
+                      <img 
+                        src={audit.uploadedImageUrl!} 
+                        className="w-full h-auto block rounded-lg max-h-[600px] object-contain mx-auto" 
+                        alt="Audited UI Screenshot" 
+                      />
+                      
+                      {/* Overlay Regions */}
+                      {filteredIssues.map((issue, idx) => {
+                        if (!issue.boundingBox) return null;
+                        const box = issue.boundingBox;
+                        const style = severityOverlayStyles[issue.severity.toLowerCase()] || severityOverlayStyles.minor;
+                        const isExpanded = expandedIssueId === issue.id;
+                        
+                        return (
+                          <div
+                            key={issue.id}
+                            className={`absolute border-2 rounded transition-all duration-200 cursor-pointer group heatmap-overlay-pin ${style.border} ${
+                              isExpanded 
+                                ? "ring-2 ring-white ring-offset-2 scale-[1.01] z-20 shadow-lg" 
+                                : "bg-opacity-10 hover:bg-opacity-25 hover:z-10"
+                            }`}
+                            style={{
+                              left: `${box.x * 100}%`,
+                              top: `${box.y * 100}%`,
+                              width: `${box.width * 100}%`,
+                              height: `${box.height * 100}%`,
+                              backgroundColor: isExpanded ? style.hex : "rgba(0,0,0,0.02)"
+                            }}
+                            onClick={() => highlightIssue(issue.id)}
+                          >
+                            {/* Numbered marker pin */}
+                            <div className={`absolute -top-3 -left-3 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md border border-white transition-transform ${
+                              style.marker
+                            } ${isExpanded ? "scale-110 ring-2 ring-white" : ""}`}>
+                              {idx + 1}
+                            </div>
+                            
+                            {/* Hover tooltip label */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-900 text-white text-[10px] font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-30">
+                              {box.label || getIssueTitle(issue)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-150">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-2 border-b">
                 <div>
@@ -1030,7 +1151,7 @@ export default function AuditPage() {
                   <p className="text-gray-500 text-sm">No issues found matching this filter</p>
                 </div>
               ) : (
-                filteredIssues.map((issue) => {
+                filteredIssues.map((issue, idx) => {
                 const issueTitle = getIssueTitle(issue);
                 const issueImpact = getIssueImpact(issue);
                 const showFixBadge = shouldShowFixBadge(issue.verifiedFixStatus);
@@ -1106,7 +1227,10 @@ export default function AuditPage() {
                             </span>
                           )}
                         </div>
-                        <h3 className="text-sm font-extrabold text-gray-900 leading-snug">{issueTitle}</h3>
+                        <h3 className="text-sm font-extrabold text-gray-900 leading-snug">
+                          {audit.inputType === "SCREENSHOT" && issue.boundingBox ? `${idx + 1}. ` : ""}
+                          {issueTitle}
+                        </h3>
                         <p className="text-xs text-gray-500 mt-1 leading-normal">{issueImpact}</p>
                       </div>
 

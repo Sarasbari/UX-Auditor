@@ -6,7 +6,7 @@
     "dev": "next dev",
     "dev:next": "next dev",
     "dev:server": "server\\.venv\\Scripts\\python -m uvicorn server.main:app --port 8001",
-    "dev:all": "start \"FastAPI\" cmd /c \"server\\.venv\\Scripts\\python -m uvicorn server.main:app --port 8001\" && next dev",
+    "dev:all": "node scripts/dev.js",
     "prebuild": "node -e \"fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\"",
     "build": "next build",
     "start": "next start",

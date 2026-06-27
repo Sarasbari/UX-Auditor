@@ -89,6 +89,8 @@ model Issue {
   ruleId            String?
   sampleElements    String?
   pageUrl           String?
+  boundingBox       String?
+  scoreDelta        Int?
   createdAt         DateTime @default(now())
 
   auditRun    AuditRun     @relation(fields: [auditRunId], references: [id], onDelete: Cascade)

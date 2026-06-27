@@ -808,6 +808,8 @@ Since you only have a static image of the user interface:
 - Categorize each issue under: accessibility, ux_heuristic, or design_quality.
 - Assign ruleId from one of: visual-hierarchy, contrast-risk, spacing, cta-clarity, form-clarity, layout-density, readability, navigation-clarity.
 - Give a score from 0 to 100 representing overall design/UX quality, deducting points appropriately for issues.
+- For each issue, estimate approximate normalized coordinates (from 0.0 to 1.0 relative to the image dimensions) where the issue is visually located. Specify this as a boundingBox. If the issue is global or cannot be localized, boundingBox can be null.
+- Labels in boundingBox must be short, 2-5 words.
 
 Respond ONLY with a valid JSON object matching this exact schema:
 {
@@ -830,7 +832,15 @@ Respond ONLY with a valid JSON object matching this exact schema:
       "viewport": "desktop" | "mobile" | "unknown",
       "ruleId": "visual-hierarchy" | "contrast-risk" | "spacing" | "cta-clarity" | "form-clarity" | "layout-density" | "readability" | "navigation-clarity",
       "pageUrl": null,
-      "sampleElements": []
+      "sampleElements": [],
+      "boundingBox": {
+        "x": 0.12,
+        "y": 0.22,
+        "width": 0.35,
+        "height": 0.18,
+        "label": "short visual label"
+      },
+      "scoreDelta": 10
     }
   ]
 }
@@ -850,6 +860,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
             ]
             
             # Use gpt-4o for vision
+            from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.2, response_format={"type": "json_object"})
             
             messages = [
@@ -884,7 +895,15 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 "viewport": "unknown",
                 "ruleId": "visual-hierarchy",
                 "pageUrl": None,
-                "sampleElements": []
+                "sampleElements": [],
+                "boundingBox": {
+                    "x": 0.75,
+                    "y": 0.15,
+                    "width": 0.15,
+                    "height": 0.06,
+                    "label": "Primary CTA placement"
+                },
+                "scoreDelta": 15
             },
             {
                 "id": str(uuid.uuid4()),
@@ -903,7 +922,15 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 "viewport": "unknown",
                 "ruleId": "contrast-risk",
                 "pageUrl": None,
-                "sampleElements": []
+                "sampleElements": [],
+                "boundingBox": {
+                    "x": 0.10,
+                    "y": 0.65,
+                    "width": 0.80,
+                    "height": 0.12,
+                    "label": "Low contrast region"
+                },
+                "scoreDelta": 10
             },
             {
                 "id": str(uuid.uuid4()),
@@ -922,7 +949,15 @@ Respond ONLY with a valid JSON object matching this exact schema:
                 "viewport": "unknown",
                 "ruleId": "spacing",
                 "pageUrl": None,
-                "sampleElements": []
+                "sampleElements": [],
+                "boundingBox": {
+                    "x": 0.05,
+                    "y": 0.35,
+                    "width": 0.60,
+                    "height": 0.25,
+                    "label": "Inconsistent section spacing"
+                },
+                "scoreDelta": 5
             }
         ]
     }
