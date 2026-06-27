@@ -27,7 +27,20 @@ export async function GET(
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
 
-    return NextResponse.json(auditRun);
+    // Parse JSON string fields back to objects for the frontend
+    const response = {
+      ...auditRun,
+      issues: auditRun.issues.map(issue => ({
+        ...issue,
+        fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff) : null,
+      })),
+      chatMessages: auditRun.chatMessages.map(msg => ({
+        ...msg,
+        citedIssueIds: JSON.parse(msg.citedIssueIds || "[]"),
+      })),
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Failed to fetch audit:", error);
     return NextResponse.json({ error: "Failed to fetch audit" }, { status: 500 });

@@ -86,7 +86,7 @@ async function startAuditJob(auditRunId: string, url: string) {
             elementSelector: issue.elementSelector,
             description: issue.description,
             fixSuggestion: issue.fixSuggestion,
-            fixDiff: issue.fixDiff ? JSON.parse(JSON.stringify(issue.fixDiff)) : undefined,
+            fixDiff: issue.fixDiff ? JSON.stringify(issue.fixDiff) : null,
             verifiedFixStatus: issue.verifiedFixStatus.toUpperCase() as "PENDING" | "SUCCESS" | "FAILED" | "NOT_APPLICABLE",
             source: issue.source.toUpperCase() as "DETERMINISTIC" | "LLM" | "MERGED",
           },

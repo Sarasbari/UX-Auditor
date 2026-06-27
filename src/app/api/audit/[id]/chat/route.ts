@@ -37,7 +37,7 @@ export async function POST(
       elementSelector: issue.elementSelector,
       description: issue.description,
       fixSuggestion: issue.fixSuggestion || "",
-      fixDiff: issue.fixDiff as FixDiff | null,
+      fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff as string) as FixDiff : null,
       verifiedFixStatus: issue.verifiedFixStatus.toLowerCase() as "pending" | "success" | "failed" | "not_applicable",
       source: issue.source.toLowerCase() as "deterministic" | "llm" | "merged",
       sources: [],
@@ -48,7 +48,7 @@ export async function POST(
       id: msg.id,
       role: msg.role.toLowerCase() as "user" | "assistant",
       content: msg.content,
-      citedIssueIds: msg.citedIssueIds,
+      citedIssueIds: JSON.parse(msg.citedIssueIds || "[]"),
       createdAt: msg.createdAt.toISOString(),
     }));
 
@@ -60,7 +60,7 @@ export async function POST(
           auditRunId: id,
           role: "USER",
           content: message,
-          citedIssueIds: [],
+          citedIssueIds: JSON.stringify([]),
         },
       }),
       prisma.chatMessage.create({
@@ -68,7 +68,7 @@ export async function POST(
           auditRunId: id,
           role: "ASSISTANT",
           content: result.response,
-          citedIssueIds: result.citedIssueIds,
+          citedIssueIds: JSON.stringify(result.citedIssueIds),
         },
       }),
     ]);
