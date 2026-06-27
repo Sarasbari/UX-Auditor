@@ -17,7 +17,8 @@ def create_audit(audit_id: str, url: str, journey_steps: str = ""):
         "status": "queued",
         "timestamp": datetime.utcnow().isoformat(),
         "score": None,
-        "report_json": None
+        "report_json": None,
+        "error_message": None
     }
 
 def update_audit_status(audit_id: str, status: str):
@@ -30,9 +31,10 @@ def save_audit_report(audit_id: str, score: int, report_data: dict):
         _audits[audit_id]["score"] = score
         _audits[audit_id]["report_json"] = json.dumps(report_data)
 
-def mark_audit_failed(audit_id: str):
+def mark_audit_failed(audit_id: str, error_message: str = None):
     if audit_id in _audits:
         _audits[audit_id]["status"] = "failed"
+        _audits[audit_id]["error_message"] = error_message or "Audit failed during execution."
 
 def get_audit(audit_id: str):
     audit = _audits.get(audit_id)

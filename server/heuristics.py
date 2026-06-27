@@ -246,9 +246,16 @@ class HeuristicsAuditor:
             else:
                 urls_to_check = []
             
-            # Check up to 15 links asynchronously in parallel to save time
-            urls_to_check = urls_to_check[:15]
-            broken_links = await HeuristicsAuditor._check_urls_status(urls_to_check)
+            # Check up to 8 links asynchronously in parallel to save time
+            urls_to_check = urls_to_check[:8]
+            try:
+                broken_links = await asyncio.wait_for(
+                    HeuristicsAuditor._check_urls_status(urls_to_check),
+                    timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                print("Warning: Broken link check timed out. Skipping.")
+                broken_links = []
         except Exception as e:
             print(f"Error checking broken links: {e}")
 
@@ -282,20 +289,19 @@ class HeuristicsAuditor:
 
     @staticmethod
     async def _check_url(session: aiohttp.ClientSession, url: str):
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         try:
             # Set a low timeout to not block the audit run
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            async with session.head(url, timeout=4, headers=headers, allow_redirects=True) as response:
+            async with session.head(url, timeout=2.5, headers=headers, allow_redirects=True) as response:
                 if response.status >= 400:
                     # Fallback to GET just in case HEAD is not allowed
-                    async with session.get(url, timeout=4, headers=headers, allow_redirects=True) as get_resp:
+                    async with session.get(url, timeout=2.5, headers=headers, allow_redirects=True) as get_resp:
                         return get_resp.status
                 return response.status
         except Exception as e:
             # try GET directly in case HEAD fails
             try:
-                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                async with session.get(url, timeout=4, headers=headers, allow_redirects=True) as get_resp:
+                async with session.get(url, timeout=2.5, headers=headers, allow_redirects=True) as get_resp:
                     return get_resp.status
             except Exception as inner_e:
                 return inner_e

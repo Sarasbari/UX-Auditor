@@ -12,6 +12,15 @@ from dotenv import load_dotenv
 # Load env variables
 load_dotenv()
 
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("ux-auditor")
+
 import server.db as db
 from server.auditor import run_audit
 from server.llm_layer import rerank_and_generate_fixes, chat_with_audit_report
@@ -43,19 +52,20 @@ class ChatRequest(BaseModel):
 async def execute_audit_job(audit_id: str, url: str, journey_steps: str):
     """
     Background job that runs the browser-use agent, aggregates findings,
-    sends them to the LLM for reranking/fixes, and updates SQLite.
+    sends them to the LLM for reranking/fixes, and updates database state.
     """
+    logger.info(f"[{audit_id}] Starting background audit job for URL: {url}")
     audit_progress[audit_id] = ["Initializing agent session..."]
     db.update_audit_status(audit_id, "processing")
     
     async def log_progress(msg: str):
-        print(f"[{audit_id}] {msg}")
+        logger.info(f"[{audit_id}] {msg}")
         if audit_id not in audit_progress:
             audit_progress[audit_id] = []
         audit_progress[audit_id].append(msg)
         
     try:
-        # Run browser-use agent audit
+        # Run browser-use agent audit (with Playwright fallback)
         audit_res = await run_audit(url, journey_steps, progress_callback=log_progress)
         
         await log_progress("Analyzing & reranking findings with LLM...")
@@ -69,15 +79,16 @@ async def execute_audit_job(audit_id: str, url: str, journey_steps: str):
         report_data["journey_steps"] = journey_steps
         report_data["timestamp"] = datetime.utcnow().isoformat()
         
-        # Save to SQLite
+        # Save report details
         db.save_audit_report(audit_id, report_data["score"], report_data)
         
         await log_progress("Audit report generated and saved successfully!")
         
     except Exception as e:
-        print(f"Error executing audit {audit_id}: {e}")
-        await log_progress(f"Audit failed: {str(e)}")
-        db.mark_audit_failed(audit_id)
+        error_msg = str(e)
+        logger.error(f"[{audit_id}] Error executing audit: {error_msg}", exc_info=True)
+        await log_progress(f"Audit failed: {error_msg}")
+        db.mark_audit_failed(audit_id, error_msg)
 
 @app.post("/audit")
 async def start_audit(req: AuditRequest, background_tasks: BackgroundTasks):
@@ -104,6 +115,11 @@ async def get_report(audit_id: str):
     # Parse report
     report_json = audit.get("report") or {}
     
+    # Normalize error message
+    error_msg = audit.get("error_message")
+    if not error_msg and audit["status"] == "failed":
+        error_msg = "Audit failed during execution."
+        
     # Construct full response payload
     return {
         "id": audit["id"],
@@ -114,7 +130,8 @@ async def get_report(audit_id: str):
         "timestamp": audit["timestamp"],
         "issues": report_json.get("issues", []),
         "chatMessages": chat_history,
-        "progress": audit_progress.get(audit_id, ["No progress logs found."])
+        "progress": audit_progress.get(audit_id, ["No progress logs found."]),
+        "error": error_msg
     }
 
 @app.post("/chat")
