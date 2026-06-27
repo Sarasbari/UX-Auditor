@@ -7,7 +7,7 @@ const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_INTERVAL_MS = 3_000;
 
 /** FastAPI base URL. */
-const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8000";
+const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8001";
 
 /**
  * Transition an audit run to FAILED with an error message.

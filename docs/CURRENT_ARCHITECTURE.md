@@ -19,7 +19,7 @@ The system runs as a dual-service architecture split between a Next.js web appli
                                  ▼
                   ┌──────────────────────────────┐
                   │     FastAPI Worker API       │
-                  │   Port 8000 (Local Dev)      │
+                  │   Port 8001 (Local Dev)      │
                   └──────────────┬───────────────┘
                                  │
                                  │ Drives Headless Chromium

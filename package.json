@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:next": "next dev",
-    "dev:server": "server\\.venv\\Scripts\\python -m uvicorn server.main:app --reload --port 8000",
-    "dev:all": "start \"FastAPI\" cmd /c \"server\\.venv\\Scripts\\python -m uvicorn server.main:app --reload --port 8000\" && next dev",
+    "dev:server": "server\\.venv\\Scripts\\python -m uvicorn server.main:app --port 8001",
+    "dev:all": "start \"FastAPI\" cmd /c \"server\\.venv\\Scripts\\python -m uvicorn server.main:app --port 8001\" && next dev",
     "prebuild": "node -e \"fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\"",
     "build": "next build",
     "start": "next start",

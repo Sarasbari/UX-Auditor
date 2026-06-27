@@ -116,7 +116,7 @@ async def run_audit(url: str, journey_steps: Optional[str] = None, progress_call
             await progress_callback("OPENAI_API_KEY not configured or empty. Using deterministic fallback.")
         return await run_deterministic_fallback(url, progress_callback)
 
-    llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.0)
+    llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.0, max_retries=1)
     
     # Configure Browser
     browser = Browser(
@@ -143,7 +143,7 @@ async def run_audit(url: str, journey_steps: Optional[str] = None, progress_call
             if not page:
                 return
                 
-            current_url = page.get_url()
+            current_url = await page.get_url()
             if current_url == "about:blank" or not current_url:
                 return
                 
@@ -216,7 +216,8 @@ async def run_audit(url: str, journey_steps: Optional[str] = None, progress_call
     )
     
     try:
-        await agent.run(on_step_end=step_hook)
+        # Wrap agent.run in a strict 120-second timeout to handle OpenAI API hangs or quota retry loops
+        await asyncio.wait_for(agent.run(on_step_end=step_hook), timeout=120.0)
     except Exception as run_err:
         print(f"Browser-use agent run encountered error: {run_err}")
         # If the agent failed but we have captured some findings, we still proceed.

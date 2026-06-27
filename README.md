@@ -7,7 +7,7 @@ Paste a URL, get verified UX fixes. Dual-engine analysis (deterministic rules + 
 | Layer | Tech | Port |
 |---|---|---|
 | Frontend + API routes | Next.js 15 (App Router) | `localhost:3000` |
-| Audit engine | Python FastAPI + browser-use | `localhost:8000` |
+| Audit engine | Python FastAPI + browser-use | `localhost:8001` |
 | Next.js database | Prisma + SQLite | `prisma/dev.db` |
 | Audit engine database | None | N/A (Stateless / In-memory transient state only) |
 
@@ -85,7 +85,7 @@ cd ..
 npm run dev:all
 ```
 
-This starts FastAPI at `localhost:8000` in a new terminal window and Next.js at `localhost:3000` in the current terminal.
+This starts FastAPI at `localhost:8001` in a new terminal window and Next.js at `localhost:3000` in the current terminal.
 
 **Option B — Two separate terminals:**
 
@@ -102,9 +102,9 @@ npm run dev
 | Check | URL | Expected |
 |---|---|---|
 | Next.js frontend | http://localhost:3000 | Landing page with URL input |
-| FastAPI docs (Swagger) | http://localhost:8000/docs | Interactive API documentation |
-| FastAPI dashboard | http://localhost:8000 | Built-in audit dashboard UI |
-| FastAPI health check | http://localhost:8000/openapi.json | JSON OpenAPI schema |
+| FastAPI docs (Swagger) | http://localhost:8001/docs | Interactive API documentation |
+| FastAPI dashboard | http://localhost:8001 | Built-in audit dashboard UI |
+| FastAPI health check | http://localhost:8001/openapi.json | JSON OpenAPI schema |
 
 ---
 
