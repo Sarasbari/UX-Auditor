@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { deduplicateIssues, calculateDiminishingScore } from "@/lib/remediation/deduplicate";
+import { estimateIssueScoreDelta } from "./score-delta";
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -145,6 +146,7 @@ export async function executeAuditJob(auditRunId: string, url: string) {
             ruleId: issue.ruleId || null,
             sampleElements: issue.sampleElements ? JSON.stringify(issue.sampleElements) : null,
             pageUrl: issue.pageUrl || null,
+            scoreDelta: typeof issue.scoreDelta === "number" ? issue.scoreDelta : estimateIssueScoreDelta(issue),
           },
         });
       }
@@ -295,7 +297,7 @@ export async function executeScreenshotAuditJob(auditRunId: string, imageUrl: st
             sampleElements: issue.sampleElements ? JSON.stringify(issue.sampleElements) : null,
             pageUrl: issue.pageUrl || null,
             boundingBox: issue.boundingBox ? JSON.stringify(issue.boundingBox) : null,
-            scoreDelta: typeof issue.scoreDelta === "number" ? issue.scoreDelta : null,
+            scoreDelta: typeof issue.scoreDelta === "number" ? issue.scoreDelta : estimateIssueScoreDelta(issue),
           },
         });
       }
