@@ -28,3 +28,7 @@ class AgentCapability(str, Enum):
     # Sprint 5 capabilities
     GENERATE_PATCH = "generate_patch"
     VERIFY_PATCH = "verify_patch"
+
+    # Sprint 6 capabilities
+    GENERATE_REPORT = "generate_report"
+    CONVERSE = "converse"

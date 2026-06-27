@@ -13,6 +13,8 @@ from ai.agents.browser_agent import BrowserAgent
 from ai.agents.analysis_agent import AnalysisAgent
 from ai.agents.patch_agent import PatchAgent
 from ai.agents.verification_agent import VerificationAgent
+from ai.agents.report_agent import ReportAgent
+from ai.agents.chat_agent import ChatAgent
 
 
 class CapabilityService:
@@ -37,5 +39,9 @@ class CapabilityService:
         # Sprint 5 capabilities mapped to agent factories
         registry.register(AgentCapability.GENERATE_PATCH, lambda: PatchAgent())
         registry.register(AgentCapability.VERIFY_PATCH, lambda: VerificationAgent())
+        
+        # Sprint 6 capabilities mapped to agent factories
+        registry.register(AgentCapability.GENERATE_REPORT, lambda: ReportAgent())
+        registry.register(AgentCapability.CONVERSE, lambda: ChatAgent())
         
         return registry
