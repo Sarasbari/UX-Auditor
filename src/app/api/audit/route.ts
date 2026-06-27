@@ -6,15 +6,10 @@ import { executeAuditJob } from "@/lib/services/audit-job";
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    let userId = session?.user?.id;
+    const userId = session?.user?.id;
 
     if (!userId) {
-      const anonymousUser = await prisma.user.upsert({
-        where: { email: "anonymous@ux-auditor.local" },
-        update: {},
-        create: { email: "anonymous@ux-auditor.local", name: "Anonymous" },
-      });
-      userId = anonymousUser.id;
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const body = await request.json();
@@ -71,16 +66,10 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const session = await auth();
-    let userId = session?.user?.id;
+    const userId = session?.user?.id;
 
     if (!userId) {
-      const anonymousUser = await prisma.user.findUnique({
-        where: { email: "anonymous@ux-auditor.local" },
-      });
-      if (!anonymousUser) {
-        return NextResponse.json([]);
-      }
-      userId = anonymousUser.id;
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const auditRuns = await prisma.auditRun.findMany({

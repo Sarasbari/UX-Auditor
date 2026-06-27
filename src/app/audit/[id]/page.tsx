@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator } from "@/components/ui/badges";
 
 interface Issue {
@@ -262,8 +262,10 @@ function simpleMarkdown(text: string): string {
 
 export default function AuditPage() {
   const params = useParams();
+  const router = useRouter();
   const [audit, setAudit] = useState<AuditData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "evidence" | "fix">("overview");
   const [chatInput, setChatInput] = useState("");
@@ -284,6 +286,12 @@ export default function AuditPage() {
   };
 
   useEffect(() => {
+    if (errorStatus === 401) {
+      router.push(`/login?callbackUrl=/audit/${params.id}`);
+    }
+  }, [errorStatus, params.id, router]);
+
+  useEffect(() => {
     let active = true;
     let timerId: NodeJS.Timeout;
 
@@ -291,15 +299,20 @@ export default function AuditPage() {
       try {
         const response = await fetch(`/api/audit/${params.id}`);
         if (!active) return;
-        if (response.ok) {
-          const data = await response.json();
-          setAudit(data);
-          
-          // Stop polling if we reached a terminal status
-          if (data.status === "completed" || data.status === "failed") {
-            setLoading(false);
-            return;
-          }
+        
+        if (!response.ok) {
+          setErrorStatus(response.status);
+          setLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        setAudit(data);
+        
+        // Stop polling if we reached a terminal status
+        if (data.status === "completed" || data.status === "failed") {
+          setLoading(false);
+          return;
         }
       } catch (error) {
         console.error("Failed to fetch audit:", error);
@@ -319,7 +332,7 @@ export default function AuditPage() {
       active = false;
       clearTimeout(timerId);
     };
-  }, [params.id]);
+  }, [params.id, errorStatus]);
 
   const handleChat = async (e?: React.FormEvent, customText?: string) => {
     if (e) e.preventDefault();
@@ -376,9 +389,39 @@ export default function AuditPage() {
   }
 
   if (!audit) {
+    if (errorStatus === 403) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center bg-white p-8 rounded-2xl shadow-sm border border-gray-150 max-w-md w-full">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+            <p className="text-gray-600 mb-6 font-sans">You do not have access to this audit.</p>
+            <a href="/" className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition active:scale-95 duration-150 text-sm">
+              Go Home
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-600">Audit not found</p>
+        <div className="text-center bg-white p-8 rounded-2xl shadow-sm border border-gray-150 max-w-md w-full">
+          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Audit Not Found</h2>
+          <p className="text-gray-600 mb-6 font-sans">Audit not found.</p>
+          <a href="/" className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition active:scale-95 duration-150 text-sm">
+            Go Home
+          </a>
+        </div>
       </div>
     );
   }

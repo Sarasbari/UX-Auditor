@@ -72,9 +72,26 @@ export const {
     strategy: "jwt",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
-        token.id = user.id;
+        if (account && (account.provider === "github" || account.provider === "google")) {
+          if (user.email) {
+            let dbUser = await prisma.user.findUnique({
+              where: { email: user.email },
+            });
+            if (!dbUser) {
+              dbUser = await prisma.user.create({
+                data: {
+                  email: user.email,
+                  name: user.name || null,
+                },
+              });
+            }
+            token.id = dbUser.id;
+          }
+        } else {
+          token.id = user.id;
+        }
       }
       return token;
     },

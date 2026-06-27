@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { SeverityBadge, ScoreDisplay, StatusIndicator } from "@/components/ui/badges";
 
 interface AuditRun {
@@ -16,11 +17,20 @@ interface AuditRun {
 }
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [audits, setAudits] = useState<AuditRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login?callbackUrl=/dashboard");
+    }
+  }, [status, router]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
     const fetchAudits = async () => {
       try {
         const response = await fetch("/api/audit");
@@ -36,9 +46,9 @@ export default function DashboardPage() {
     };
 
     fetchAudits();
-  }, []);
+  }, [status]);
 
-  if (loading) {
+  if (loading || status === "loading" || status === "unauthenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full" />
@@ -78,7 +88,14 @@ export default function DashboardPage() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          {session?.user && (
+            <p className="text-sm text-gray-600">
+              Logged in as <span className="font-semibold text-gray-900">{session.user.name || session.user.email}</span>
+            </p>
+          )}
+        </div>
 
         {audits.length === 0 ? (
           <div className="bg-white rounded-xl p-12 text-center shadow-sm">

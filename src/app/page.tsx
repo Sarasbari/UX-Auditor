@@ -13,6 +13,10 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!session) {
+      router.push("/login?callbackUrl=/");
+      return;
+    }
     if (!url) return;
 
     setIsLoading(true);
@@ -102,8 +106,8 @@ export default function Home() {
             />
             <button
               type="submit"
-              disabled={isLoading || !url}
-              className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              disabled={isLoading || (!!session && !url)}
+              className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition whitespace-nowrap"
             >
               {isLoading ? (
                 <span className="flex items-center gap-2">
@@ -113,13 +117,20 @@ export default function Home() {
                   </svg>
                   Auditing...
                 </span>
-              ) : (
+              ) : session ? (
                 "Run Audit"
+              ) : (
+                "Sign in to run audit"
               )}
             </button>
           </div>
+          {!session && (
+            <p className="mt-3 text-gray-500 text-xs text-center">
+              Create an account to save audit history and chat with reports.
+            </p>
+          )}
           {error && (
-            <p className="mt-3 text-red-600 text-sm">{error}</p>
+            <p className="mt-3 text-red-600 text-sm text-center">{error}</p>
           )}
         </form>
 

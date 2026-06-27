@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/services/auth";
 import { prisma } from "@/lib/db/prisma";
 
 export async function GET(
@@ -6,6 +7,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const { id } = await params;
 
     const auditRun = await prisma.auditRun.findUnique({
@@ -28,6 +34,10 @@ export async function GET(
 
     if (!auditRun) {
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
+    }
+
+    if (auditRun.userId !== session.user.id) {
+      return NextResponse.json({ error: "You do not have access to this audit" }, { status: 403 });
     }
 
     // Fetch dynamic progress logs from FastAPI if not in terminal state

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/services/auth";
 import { prisma } from "@/lib/db/prisma";
 import type { FixDiff } from "@/types";
 import { chatWithAuditReport } from "@/lib/services/chat";
@@ -8,6 +9,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const { id } = await params;
     const body = await request.json();
     const { message, selectedIssueId } = body;
@@ -28,6 +34,10 @@ export async function POST(
 
     if (!auditRun) {
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
+    }
+
+    if (auditRun.userId !== session.user.id) {
+      return NextResponse.json({ error: "You do not have access to this audit" }, { status: 403 });
     }
 
     const issues = auditRun.issues.map(issue => {
@@ -116,7 +126,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     const { id } = await params;
+
+    const auditRun = await prisma.auditRun.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+
+    if (!auditRun) {
+      return NextResponse.json({ error: "Audit not found" }, { status: 404 });
+    }
+
+    if (auditRun.userId !== session.user.id) {
+      return NextResponse.json({ error: "You do not have access to this audit" }, { status: 403 });
+    }
 
     const messages = await prisma.chatMessage.findMany({
       where: { auditRunId: id },
