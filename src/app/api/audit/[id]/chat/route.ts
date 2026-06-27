@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { chatWithAuditReport } from "@/lib/engines/llm/chat";
+import { prisma } from "@/lib/db/prisma";
 import type { FixDiff } from "@/types";
 
 export async function POST(

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/db/prisma";
 
 /** Maximum time (ms) to poll FastAPI before declaring timeout. */
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes

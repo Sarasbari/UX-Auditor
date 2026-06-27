@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { executeAuditJob } from "@/lib/jobs/audit-job";
+import { auth } from "@/lib/services/auth";
+import { prisma } from "@/lib/db/prisma";
+import { executeAuditJob } from "@/lib/services/audit-job";
 
 export async function POST(request: NextRequest) {
   try {

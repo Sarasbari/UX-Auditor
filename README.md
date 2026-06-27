@@ -147,10 +147,15 @@ UX-Auditor/
 │   │   └── page.tsx            # Landing page
 │   ├── components/ui/          # Shared UI components
 │   ├── lib/                    # Server utilities
-│   │   ├── auth.ts             # NextAuth config
-│   │   ├── prisma.ts           # Prisma client singleton
-│   │   ├── utils.ts            # UI helpers
-│   │   └── engines/            # Audit engine modules
+│   │   ├── db/
+│   │   │   └── prisma.ts       # Prisma client singleton
+│   │   ├── services/
+│   │   │   ├── auth.ts         # NextAuth config
+│   │   │   └── audit-job.ts    # Background job runner
+│   │   └── utils.ts            # UI helpers
+│   ├── experimental/           # Unused/Experimental TypeScript engine
+│   │   ├── audit-orchestrator.ts
+│   │   └── engines/
 │   └── types/                  # TypeScript type definitions
 ├── server/                     # Python FastAPI backend
 │   ├── main.py                 # FastAPI app (endpoints + dashboard)
