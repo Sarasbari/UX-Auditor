@@ -23,7 +23,7 @@ logger = logging.getLogger("ux-auditor")
 
 import server.db as db
 from server.auditor import run_audit
-from server.llm_layer import rerank_and_generate_fixes, chat_with_audit_report
+from server.llm_layer import rerank_and_generate_fixes
 
 app = FastAPI(title="Conversational UX Auditor API")
 
@@ -43,11 +43,6 @@ class AuditRequest(BaseModel):
     url: str
     journey_steps: Optional[str] = ""
     audit_id: Optional[str] = None
-
-class ChatRequest(BaseModel):
-    message: str
-    chat_history: List[Dict[str, Any]]
-    report_data: Dict[str, Any]
 
 async def execute_audit_job(audit_id: str, url: str, journey_steps: str):
     """
@@ -133,16 +128,6 @@ async def get_report(audit_id: str):
         "progress": audit_progress.get(audit_id, ["No progress logs found."]),
         "error": error_msg
     }
-
-@app.post("/chat")
-async def chat_followup(req: ChatRequest):
-    # Call LLM chat layer directly with request context
-    chat_res = await chat_with_audit_report(req.chat_history, req.report_data, req.message)
-    return {
-        "response": chat_res["response"],
-        "citedIssueIds": chat_res["citedIssueIds"]
-    }
-
 
 @app.get("/progress/{audit_id}")
 async def get_progress(audit_id: str):
