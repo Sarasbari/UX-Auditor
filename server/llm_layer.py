@@ -68,12 +68,6 @@ async def rerank_and_generate_fixes(raw_findings: List[Dict[str, Any]], url: str
     """
     Sends raw findings to GPT-4o to rerank by severity, generate HTML/CSS fixes, and deduplicate.
     """
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if not openai_key:
-        raise ValueError("OPENAI_API_KEY environment variable not set in .env")
-
-    llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.0, response_format={"type": "json_object"})
-
     # Prepare inputs for LLM
     formatted_findings = []
     for item in raw_findings:
@@ -152,30 +146,108 @@ async def rerank_and_generate_fixes(raw_findings: List[Dict[str, Any]], url: str
                 "elementSelector": None
             })
 
-    # Run LLM reranking
-    user_content = f"Target URL: {url}\n\nRaw Findings List:\n{json.dumps(formatted_findings, indent=2)}"
-    
-    messages = [
-        {"role": "system", "content": RERANK_PROMPT},
-        {"role": "user", "content": user_content}
-    ]
-    
-    response = await llm.ainvoke(messages)
-    try:
-        result_json = json.loads(response.content)
-    except Exception as e:
-        print(f"Failed to parse LLM JSON: {e}")
-        # Fallback empty structure
-        result_json = {"score": 100, "issues": []}
-
-    # Ensure every issue has a UUID
-    for issue in result_json.get("issues", []):
-        if not issue.get("id"):
-            issue["id"] = str(uuid.uuid4())
-        # Make sure verified status defaults correctly
-        if not issue.get("verifiedFixStatus"):
-            issue["verifiedFixStatus"] = "not_applicable"
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key and not openai_key.startswith("sk-..."):
+        try:
+            llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.0, response_format={"type": "json_object"})
+            user_content = f"Target URL: {url}\n\nRaw Findings List:\n{json.dumps(formatted_findings, indent=2)}"
             
+            messages = [
+                {"role": "system", "content": RERANK_PROMPT},
+                {"role": "user", "content": user_content}
+            ]
+            
+            response = await llm.ainvoke(messages)
+            result_json = json.loads(response.content)
+            
+            # Ensure every issue has a UUID
+            for issue in result_json.get("issues", []):
+                if not issue.get("id"):
+                    issue["id"] = str(uuid.uuid4())
+                if not issue.get("verifiedFixStatus"):
+                    issue["verifiedFixStatus"] = "not_applicable"
+            return result_json
+        except Exception as llm_err:
+            print(f"LLM Rerank call failed: {llm_err}. Using deterministic fallback.")
+            
+    # Deterministic fallback parsing
+    result_json = {
+        "score": 100,
+        "issues": []
+    }
+    
+    # Deduplicate raw findings
+    seen_keys = set()
+    deduped_findings = []
+    for f in formatted_findings:
+        key = (f.get("elementSelector") or "global", f.get("ruleId"))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped_findings.append(f)
+            
+    issues = []
+    deduct_sum = 0
+    for f in deduped_findings:
+        issue_id = str(uuid.uuid4())
+        rule_id = f.get("ruleId", "")
+        finding_type = f.get("type", "")
+        
+        # Map severity
+        severity = "moderate"
+        if "axe" in finding_type.lower():
+            severity = "serious"
+        elif "contrast" in rule_id.lower() or "missing-label" in rule_id.lower():
+            severity = "serious"
+        elif "touch" in rule_id.lower() or "broken" in rule_id.lower():
+            severity = "moderate"
+        elif "slow-load" in rule_id.lower():
+            severity = "minor"
+            
+        # Score deduction
+        if severity == "critical":
+            deduct_sum += 15
+        elif severity == "serious":
+            deduct_sum += 8
+        elif severity == "moderate":
+            deduct_sum += 4
+        elif severity == "minor":
+            deduct_sum += 1
+            
+        # Category
+        category = "ux_heuristic"
+        if "axe" in finding_type.lower():
+            category = "accessibility"
+        elif "performance" in finding_type.lower():
+            category = "custom_rule"
+            
+        # Simple text fixes
+        fix_suggestion = "Ensure compliance with design standards."
+        if "contrast" in rule_id.lower():
+            fix_suggestion = f"Increase the color contrast ratio of the element to at least 4.5:1 (or 3:1 for large text). Current details: {f.get('description', '')}"
+        elif "touch" in rule_id.lower():
+            fix_suggestion = "Increase the touch target size of the interactive element to at least 44x44 pixels to prevent mis-clicks."
+        elif "missing-label" in rule_id.lower():
+            fix_suggestion = "Provide a descriptive text label using a <label> tag, aria-label, or aria-labelledby attribute for screen readers."
+        elif "broken-link" in rule_id.lower():
+            fix_suggestion = "Correct the anchor href attribute or restore the target page to ensure it returns a 200 OK status."
+        elif "slow-load" in rule_id.lower():
+            fix_suggestion = "Optimize image assets, enable compression, and review server performance to reduce load time."
+            
+        issues.append({
+            "id": issue_id,
+            "severity": severity,
+            "category": category,
+            "elementSelector": f.get("elementSelector"),
+            "description": f.get("description"),
+            "severityJustification": "Affects accessibility standards and visual hierarchy on mobile/desktop displays.",
+            "fixSuggestion": fix_suggestion,
+            "fixDiff": None,
+            "verifiedFixStatus": "not_applicable",
+            "source": "deterministic"
+        })
+        
+    result_json["issues"] = issues
+    result_json["score"] = max(0, 100 - deduct_sum)
     return result_json
 
 async def chat_with_audit_report(chat_history: List[Dict[str, Any]], report_data: Dict[str, Any], message: str) -> Dict[str, Any]:
@@ -183,11 +255,7 @@ async def chat_with_audit_report(chat_history: List[Dict[str, Any]], report_data
     Answers user questions grounded in the audit report findings, returning chat text response and cited issues.
     """
     openai_key = os.getenv("OPENAI_API_KEY")
-    if not openai_key:
-        raise ValueError("OPENAI_API_KEY environment variable not set in .env")
-
-    llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.2, response_format={"type": "json_object"})
-
+    
     # Prepare context
     report_context = {
         "url": report_data.get("url"),
@@ -206,25 +274,51 @@ async def chat_with_audit_report(chat_history: List[Dict[str, Any]], report_data
         ]
     }
 
-    system_msg = CHAT_SYSTEM_PROMPT.format(report_context=json.dumps(report_context, indent=2))
-    
-    # Format messages for LLM
-    formatted_messages = [{"role": "system", "content": system_msg}]
-    for chat in chat_history:
-        role = chat.get("role", "user").lower()
-        if role in ["user", "assistant"]:
-            formatted_messages.append({"role": role, "content": chat.get("content", "")})
+    if openai_key and not openai_key.startswith("sk-..."):
+        try:
+            llm = ChatOpenAI(model="gpt-4o", api_key=openai_key, temperature=0.2, response_format={"type": "json_object"})
+            system_msg = CHAT_SYSTEM_PROMPT.format(report_context=json.dumps(report_context, indent=2))
             
-    formatted_messages.append({"role": "user", "content": message})
+            # Format messages for LLM
+            formatted_messages = [{"role": "system", "content": system_msg}]
+            for chat in chat_history:
+                role = chat.get("role", "user").lower()
+                if role in ["user", "assistant"]:
+                    formatted_messages.append({"role": role, "content": chat.get("content", "")})
+                    
+            formatted_messages.append({"role": "user", "content": message})
 
-    response = await llm.ainvoke(formatted_messages)
-    try:
-        chat_res = json.loads(response.content)
-    except Exception as e:
-        print(f"Failed to parse Chat LLM response: {e}")
-        chat_res = {
-            "response": "I apologize, but I encountered an error parsing the audit details. Please try asking again.",
-            "citedIssueIds": []
-        }
+            response = await llm.ainvoke(formatted_messages)
+            return json.loads(response.content)
+        except Exception as llm_err:
+            print(f"Chat LLM call failed: {llm_err}. Using deterministic search fallback.")
+
+    # Fallback keyword matching
+    message_lower = message.lower()
+    matched_issues = []
+    response_text = "*(Assistant in Local Resilient Mode)*\n\n"
+    
+    for issue in report_data.get("issues", []):
+        desc = (issue.get("description") or "").lower()
+        selector = (issue.get("elementSelector") or "").lower()
+        category = (issue.get("category") or "").lower()
         
-    return chat_res
+        # Match keywords
+        if any(keyword in desc or keyword in selector or keyword in category for keyword in message_lower.split() if len(keyword) > 3):
+            matched_issues.append(issue)
+            
+    if matched_issues:
+        response_text += "Based on your audit findings, here are the related issues I located:\n\n"
+        for issue in matched_issues:
+            response_text += f"- **[{issue.get('severity').upper()}]** on `{issue.get('elementSelector')}`:\n  {issue.get('description')}\n  *Recommended Fix:* {issue.get('fixSuggestion')}\n\n"
+    else:
+        response_text += "I searched the audit report but couldn't find any specific matching issues for your query. Here is a summary of the audit findings:\n\n"
+        response_text += f"- **Audited Website**: {report_data.get('url')}\n"
+        response_text += f"- **UX Audit Score**: {report_data.get('score')}/100\n"
+        response_text += f"- **Total Issues Flagged**: {len(report_data.get('issues', []))}\n"
+        response_text += "\nIf you want details on specific issues, try entering words like 'contrast', 'touch', 'label', or 'broken'."
+        
+    return {
+        "response": response_text,
+        "citedIssueIds": [issue.get("id") for issue in matched_issues]
+    }

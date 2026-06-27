@@ -1,7 +1,9 @@
 import os
 import asyncio
+import base64
+import json
 from typing import List, Dict, Any, Optional
-from playwright.async_api import Page
+from browser_use.actor.page import Page
 from browser_use import Agent, Browser, BrowserProfile, ChatOpenAI
 from server.heuristics import HeuristicsAuditor
 
@@ -11,7 +13,7 @@ AXE_PATH = os.path.join(BASE_DIR, "node_modules", "axe-core", "axe.min.js")
 
 async def run_axe_on_page(page: Page) -> Dict[str, Any]:
     """
-    Reads axe-core minified JS, injects it into the playwright page, and runs accessibility checks.
+    Reads axe-core minified JS, injects it into the page, and runs accessibility checks.
     """
     if not os.path.exists(AXE_PATH):
         raise FileNotFoundError(f"axe-core not found at {AXE_PATH}. Make sure node_modules is installed.")
@@ -19,12 +21,14 @@ async def run_axe_on_page(page: Page) -> Dict[str, Any]:
     with open(AXE_PATH, "r", encoding="utf-8") as f:
         axe_js = f.read()
     
-    # Inject axe-core
-    await page.evaluate(axe_js)
+    # Inject axe-core by wrapping it in an arrow function
+    await page.evaluate(f"() => {{ {axe_js} }}")
     
-    # Run analysis
-    results = await page.evaluate("axe.run()")
-    return results
+    # Run analysis (CDP evaluation returns JSON string representation of the object)
+    results_str = await page.evaluate("() => axe.run()")
+    if results_str:
+        return json.loads(results_str)
+    return {}
 
 async def run_audit(url: str, journey_steps: Optional[str] = None, progress_callback = None) -> Dict[str, Any]:
     """
@@ -59,9 +63,11 @@ async def run_audit(url: str, journey_steps: Optional[str] = None, progress_call
         try:
             curr_session = agent.browser_session
             page = await curr_session.get_current_page()
-            current_url = page.url
-            
-            if current_url == "about:blank":
+            if not page:
+                return
+                
+            current_url = page.get_url()
+            if current_url == "about:blank" or not current_url:
                 return
                 
             if progress_callback:
@@ -69,11 +75,12 @@ async def run_audit(url: str, journey_steps: Optional[str] = None, progress_call
             
             urls_visited.append(current_url)
             
-            # Capture screenshot
-            screenshot_bytes = await page.screenshot(full_page=True, type="png")
+            # Capture screenshot (returns base64 string in custom Page class)
+            screenshot_b64 = await page.screenshot()
+            screenshot_bytes = base64.b64decode(screenshot_b64)
             
             # Capture DOM HTML
-            html = await page.content()
+            html = await page.evaluate("() => document.documentElement.outerHTML")
             
             # Run axe-core
             axe_results = {}

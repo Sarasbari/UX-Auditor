@@ -1,8 +1,9 @@
 import asyncio
 import aiohttp
-from playwright.async_api import Page
+from browser_use.actor.page import Page
 from typing import List, Dict, Any
 import time
+import json
 
 class HeuristicsAuditor:
     @staticmethod
@@ -13,21 +14,29 @@ class HeuristicsAuditor:
         # 1. Measure load time
         load_time_ms = 0
         try:
-            perf_timing = await page.evaluate("() => JSON.stringify(window.performance.timing)")
+            perf_timing = await page.evaluate("""() => {
+                const t = window.performance.timing;
+                if (!t) return null;
+                return {
+                    navigationStart: t.navigationStart,
+                    loadEventEnd: t.loadEventEnd,
+                    responseEnd: t.responseEnd
+                };
+            }""")
             if perf_timing:
-                import json
-                timing = json.loads(perf_timing)
-                if timing.get("navigationStart") and timing.get("loadEventEnd"):
-                    load_time_ms = timing["loadEventEnd"] - timing["navigationStart"]
-                elif timing.get("navigationStart") and timing.get("responseEnd"):
-                    load_time_ms = timing["responseEnd"] - timing["navigationStart"]
+                timing = json.loads(perf_timing) if isinstance(perf_timing, str) else perf_timing
+                if timing:
+                    if timing.get("navigationStart") and timing.get("loadEventEnd"):
+                        load_time_ms = timing["loadEventEnd"] - timing["navigationStart"]
+                    elif timing.get("navigationStart") and timing.get("responseEnd"):
+                        load_time_ms = timing["responseEnd"] - timing["navigationStart"]
         except Exception as e:
             print(f"Error reading performance timing: {e}")
 
         # 2. Run contrast check inside JS
         contrast_violations = []
         try:
-            contrast_violations = await page.evaluate("""() => {
+            res = await page.evaluate("""() => {
                 const elements = Array.from(document.querySelectorAll('*'));
                 const violations = [];
                 elements.forEach(el => {
@@ -93,13 +102,15 @@ class HeuristicsAuditor:
                 });
                 return violations.slice(0, 15); // limit to top 15 contrast issues to keep payload sane
             }""")
+            if res:
+                contrast_violations = json.loads(res) if isinstance(res, str) else res
         except Exception as e:
             print(f"Error running contrast check: {e}")
 
         # 3. Run tap-target size check inside JS
         tap_target_violations = []
         try:
-            tap_target_violations = await page.evaluate("""() => {
+            res = await page.evaluate("""() => {
                 const interactive = Array.from(document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"]'));
                 const violations = [];
                 interactive.forEach(el => {
@@ -128,13 +139,15 @@ class HeuristicsAuditor:
                 });
                 return violations.slice(0, 15); // limit to top 15
             }""")
+            if res:
+                tap_target_violations = json.loads(res) if isinstance(res, str) else res
         except Exception as e:
             print(f"Error running tap target check: {e}")
 
         # 4. Form label check inside JS
         form_label_violations = []
         try:
-            form_label_violations = await page.evaluate("""() => {
+            res = await page.evaluate("""() => {
                 const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
                 const violations = [];
                 inputs.forEach(input => {
@@ -170,13 +183,15 @@ class HeuristicsAuditor:
                 });
                 return violations;
             }""")
+            if res:
+                form_label_violations = json.loads(res) if isinstance(res, str) else res
         except Exception as e:
             print(f"Error running form label check: {e}")
 
         # 5. Key actions click depth check
         key_actions = []
         try:
-            key_actions = await page.evaluate("""() => {
+            res = await page.evaluate("""() => {
                 const ctaRegex = /(sign\\s*up|register|create\\s*account|join|log\\s*in|sign\\s*in|login|checkout|buy|purchase|pricing|get\\s*started)/i;
                 const elements = Array.from(document.querySelectorAll('a, button, [role="button"]'));
                 const found = [];
@@ -212,18 +227,25 @@ class HeuristicsAuditor:
                 });
                 return found.slice(0, 10);
             }""")
+            if res:
+                key_actions = json.loads(res) if isinstance(res, str) else res
         except Exception as e:
             print(f"Error checking key actions: {e}")
 
         # 6. Broken links check
         broken_links = []
         try:
-            urls_to_check = await page.evaluate("""() => {
+            res = await page.evaluate("""() => {
                 const links = Array.from(document.querySelectorAll('a'))
                     .map(a => a.href)
                     .filter(href => href && (href.startsWith('http://') || href.startsWith('https://')));
                 return Array.from(new Set(links));
             }""")
+            if res:
+                urls_to_check = json.loads(res) if isinstance(res, str) else res
+            else:
+                urls_to_check = []
+            
             # Check up to 15 links asynchronously in parallel to save time
             urls_to_check = urls_to_check[:15]
             broken_links = await HeuristicsAuditor._check_urls_status(urls_to_check)

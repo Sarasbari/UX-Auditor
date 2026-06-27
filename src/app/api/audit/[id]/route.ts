@@ -27,11 +27,16 @@ export async function GET(
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
 
-    // Parse JSON string fields back to objects for the frontend
+    // Parse JSON string fields and convert uppercase DB values to lowercase for the frontend
     const response = {
       ...auditRun,
+      status: auditRun.status.toLowerCase(),
       issues: auditRun.issues.map(issue => ({
         ...issue,
+        severity: issue.severity.toLowerCase(),
+        category: issue.category.toLowerCase(),
+        verifiedFixStatus: issue.verifiedFixStatus.toLowerCase(),
+        source: issue.source.toLowerCase(),
         fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff) : null,
       })),
       chatMessages: auditRun.chatMessages.map(msg => ({
