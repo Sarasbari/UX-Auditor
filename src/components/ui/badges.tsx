@@ -92,20 +92,28 @@ interface ConfidenceBadgeProps {
 
 export function ConfidenceBadge({ confidence, className }: ConfidenceBadgeProps) {
   const colors: Record<string, string> = {
-    high: "bg-green-100 text-green-800 border border-green-200",
-    medium: "bg-yellow-100 text-yellow-800 border border-yellow-200",
-    low: "bg-gray-100 text-gray-800 border border-gray-250",
+    high: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    medium: "bg-amber-50 text-amber-700 border-amber-200",
+    low: "bg-blue-50 text-blue-700 border-blue-200",
   };
+
+  const labels: Record<string, string> = {
+    high: "High confidence",
+    medium: "Medium confidence",
+    low: "Low confidence",
+  };
+
+  const cleanConfidence = (confidence || "medium").toLowerCase();
 
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border uppercase tracking-wider",
-        colors[confidence] || "bg-gray-100 text-gray-600 border-gray-200",
+        "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border capitalize tracking-normal",
+        colors[cleanConfidence] || "bg-gray-50 text-gray-700 border-gray-200",
         className
       )}
     >
-      Conf: {confidence}
+      {labels[cleanConfidence] || `${confidence} confidence`}
     </span>
   );
 }

@@ -14,6 +14,9 @@ export async function GET(
         project: true,
         issues: {
           orderBy: { severity: "asc" },
+          include: {
+            screenshots: true,
+          },
         },
         screenshots: true,
         domSnapshot: true,
@@ -27,11 +30,27 @@ export async function GET(
       return NextResponse.json({ error: "Audit not found" }, { status: 404 });
     }
 
+    // Fetch dynamic progress logs from FastAPI if not in terminal state
+    let progress: string[] = [];
+    if (auditRun.status !== "COMPLETED" && auditRun.status !== "FAILED") {
+      try {
+        const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8001";
+        const pollRes = await fetch(`${FASTAPI_URL}/progress/${id}`);
+        if (pollRes.ok) {
+          const data = await pollRes.json();
+          progress = data.progress || [];
+        }
+      } catch (e) {
+        console.warn(`[route.ts] Could not fetch progress logs for audit ${id}:`, e);
+      }
+    }
+
     // Parse JSON string fields and convert uppercase DB values to lowercase for the frontend
     const response = {
       ...auditRun,
       status: auditRun.status.toLowerCase(),
       errorMessage: auditRun.errorMessage,
+      progress,
       issues: auditRun.issues.map(issue => ({
         ...issue,
         severity: issue.severity.toLowerCase(),
@@ -46,6 +65,7 @@ export async function GET(
         sampleElements: (issue as any).sampleElements ? JSON.parse((issue as any).sampleElements) : null,
         pageUrl: (issue as any).pageUrl,
         fixDiff: issue.fixDiff ? JSON.parse(issue.fixDiff) : null,
+        screenshots: issue.screenshots,
       })),
       chatMessages: auditRun.chatMessages.map(msg => ({
         ...msg,

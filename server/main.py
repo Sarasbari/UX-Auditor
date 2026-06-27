@@ -245,29 +245,67 @@ HTML_DASHBOARD = """
             </div>
 
             <!-- Progress Tracker -->
-            <div id="progress-box" class="hidden glass-panel rounded-2xl p-6 shadow-xl">
-                <h3 class="font-semibold text-white mb-3">Auditor Progress Log</h3>
-                <div class="bg-black/40 border border-gray-800/80 rounded-xl p-4 h-48 overflow-y-auto font-mono text-xs text-blue-400 space-y-1.5" id="progress-logs">
-                    <!-- Progress steps added dynamically -->
+            <div id="progress-box" class="hidden glass-panel rounded-2xl p-6 shadow-xl space-y-6">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <h3 class="font-semibold text-white">Audit Pipeline Progress</h3>
+                    <div id="active-step-badge" class="flex items-center space-x-2 text-xs font-semibold text-blue-400 bg-blue-950/40 border border-blue-900/60 px-3 py-1 rounded-full">
+                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
+                        <span id="active-step-label">Initializing...</span>
+                    </div>
+                </div>
+                
+                <!-- Vertical Timeline -->
+                <div class="relative pl-8 border-l border-gray-850 ml-3 space-y-5" id="timeline-steps">
+                    <!-- Dynamic Steps checklist -->
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-gray-800/80">
+                    <span class="block text-xs font-semibold text-gray-500 uppercase mb-2">Raw Engine Logs</span>
+                    <div class="bg-black/40 border border-gray-800/80 rounded-xl p-3 h-24 overflow-y-auto font-mono text-[10px] text-blue-400 space-y-1.5" id="progress-logs"></div>
                 </div>
             </div>
 
             <!-- Report Results View -->
             <div id="report-view" class="hidden flex flex-col space-y-4">
-                <div class="glass-panel rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h2 class="text-2xl font-bold text-white mb-1">Audit Report</h2>
-                        <p class="text-sm text-gray-400" id="report-url"></p>
-                    </div>
-                    <div class="flex items-center space-x-6">
-                        <div class="text-center">
-                            <span class="block text-xs font-semibold uppercase text-gray-500">UX Score</span>
-                            <span id="report-score" class="text-4xl font-extrabold text-green-400">92</span>
+                <div class="glass-panel rounded-2xl p-6 shadow-xl flex flex-col space-y-4">
+                    <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                        <div>
+                            <h2 class="text-xl font-bold text-white">Audit Report</h2>
+                            <p class="text-xs text-gray-400 font-medium mt-0.5" id="report-url"></p>
                         </div>
-                        <div class="h-10 w-[1px] bg-gray-800"></div>
-                        <div class="text-center">
-                            <span class="block text-xs font-semibold uppercase text-gray-500">Total Issues</span>
-                            <span id="report-count" class="text-4xl font-extrabold text-blue-400">0</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+                        <div class="md:col-span-1 border-r border-gray-800 pr-4 flex flex-col items-center md:items-start">
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">UX Score</span>
+                            <div class="flex items-baseline space-x-1">
+                                <span id="report-score" class="text-4xl font-black text-white">N/A</span>
+                                <span class="text-xs text-gray-500">/100</span>
+                            </div>
+                            <span id="report-score-label" class="mt-2 inline-block px-2.5 py-0.5 rounded-full font-bold text-[9px] uppercase border bg-gray-900 border-gray-800 text-gray-400">Loading</span>
+                        </div>
+                        <div class="md:col-span-3 space-y-3">
+                            <div>
+                                <h3 class="font-bold text-white text-sm">Executive Summary</h3>
+                                <p class="text-xs text-gray-400 leading-relaxed mt-1" id="report-summary-text">Analyzing findings...</p>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center md:text-left">
+                                <div class="bg-black/30 border border-gray-850 rounded-xl p-2">
+                                    <span class="block text-[9px] font-semibold uppercase text-gray-500">WCAG Issues</span>
+                                    <span id="report-wcag-count" class="text-sm font-bold text-blue-400">0</span>
+                                </div>
+                                <div class="bg-black/30 border border-gray-850 rounded-xl p-2">
+                                    <span class="block text-[9px] font-semibold uppercase text-gray-500">UX Suggestions</span>
+                                    <span id="report-ux-count" class="text-sm font-bold text-teal-400">0</span>
+                                </div>
+                                <div class="bg-black/30 border border-gray-850 rounded-xl p-2">
+                                    <span class="block text-[9px] font-semibold uppercase text-gray-500">Grouped groups</span>
+                                    <span id="report-grouped-count" class="text-sm font-bold text-indigo-400">0</span>
+                                </div>
+                                <div class="bg-black/30 border border-gray-850 rounded-xl p-2">
+                                    <span class="block text-[9px] font-semibold uppercase text-gray-500">Verified Fixes</span>
+                                    <span id="report-verified-count" class="text-sm font-bold text-emerald-400">0</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -316,64 +354,267 @@ HTML_DASHBOARD = """
 
     </main>
 
-    <!-- Detailed Issue Modal -->
-    <div id="issue-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="glass-panel w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-            <div class="p-5 border-b border-gray-800 flex justify-between items-center bg-gray-950/40">
-                <h3 class="font-bold text-lg text-white" id="modal-title">Issue Details</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
-            </div>
-            <div class="p-6 overflow-y-auto space-y-6 text-sm">
-                
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Severity</span>
-                        <span id="modal-severity" class="inline-block px-3 py-1 rounded-full font-bold text-xs">CRITICAL</span>
-                    </div>
-                    <div>
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Rule/Category</span>
-                        <span id="modal-category" class="inline-block px-3 py-1 bg-gray-800 rounded-full font-bold text-xs text-blue-400">accessibility</span>
-                    </div>
-                </div>
 
-                <div>
-                    <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Issue Description</span>
-                    <p id="modal-desc" class="text-gray-200 leading-relaxed bg-gray-950/40 p-3.5 border border-gray-850 rounded-xl"></p>
-                </div>
-
-                <div>
-                    <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Business Impact Reasoning</span>
-                    <p id="modal-justification" class="text-gray-300 italic"></p>
-                </div>
-
-                <div>
-                    <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Target Element CSS Selector</span>
-                    <code id="modal-selector" class="block bg-black/50 p-2.5 rounded-lg text-xs text-purple-400 overflow-x-auto border border-gray-850"></code>
-                </div>
-
-                <div id="modal-fix-section">
-                    <span class="block text-xs uppercase text-gray-500 font-semibold mb-1.5">Concrete Code Fix (Before vs After)</span>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="bg-red-950/20 border border-red-900/40 rounded-xl p-4 flex flex-col">
-                            <span class="text-xs font-bold text-red-400 mb-1.5">Original Code</span>
-                            <pre id="modal-original-code" class="text-xs text-gray-300 font-mono overflow-auto flex-1 max-h-36 whitespace-pre-wrap"></pre>
-                        </div>
-                        <div class="bg-green-950/20 border border-green-900/40 rounded-xl p-4 flex flex-col">
-                            <span class="text-xs font-bold text-green-400 mb-1.5">Suggested Fix</span>
-                            <pre id="modal-patched-code" class="text-xs text-gray-300 font-mono overflow-auto flex-1 max-h-36 whitespace-pre-wrap"></pre>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
 
     <!-- Scripts -->
     <script>
         let currentAuditId = null;
         let auditInterval = null;
         let allIssues = [];
+        let expandedIssueId = null;
+        let activeTab = "overview";
+
+        const STEPS = [
+          { id: "queued", label: "Queued in system" },
+          { id: "opening", label: "Opening website in browser" },
+          { id: "capturing", label: "Capturing screenshot and DOM" },
+          { id: "wcag", label: "Running WCAG / axe-core checks" },
+          { id: "heuristics", label: "Running custom UX heuristic rules" },
+          { id: "grouping", label: "Grouping duplicate findings" },
+          { id: "score", label: "Calculating UX score" },
+          { id: "fixes", label: "Generating fix suggestions" },
+          { id: "preparing", label: "Preparing final report" }
+        ];
+
+        const STEP_HELPERS = {
+          "queued": "Waiting for an audit runner to pick up this job.",
+          "opening": "Launching headless Chrome, setting viewport size, and loading the target URL.",
+          "capturing": "Taking page screenshots and dumping the full interactive DOM tree.",
+          "wcag": "Checking color contrast, aria labels, landmarks, keyboard focus, and accessibility trees.",
+          "heuristics": "Measuring touch targets, verifying anchor link destinations, and tracking page load speeds.",
+          "grouping": "Stripping dynamic class IDs, normalising CSS selectors, and merging repeated layout issues.",
+          "score": "Applying capped category weights and diminishing-returns formulas to compute UX Score.",
+          "fixes": "Analyzing broken elements and generating drop-in HTML/CSS patch suggestions.",
+          "preparing": "Writing report metrics, uploading screenshots, and preparing the interactive dashboard."
+        };
+
+        function getIssueTitle(issue) {
+            const ruleId = issue.ruleId || "";
+            const description = issue.description || "";
+            
+            if (ruleId === "color-contrast") return "Text contrast is too low";
+            if (ruleId === "small-touch-target" || ruleId === "target-size") return "Touch target is too small";
+            if (ruleId === "missing-label") return "Form field is missing a label";
+            if (ruleId === "broken-link") return "Broken link detected";
+            if (ruleId === "slow-load-time") return "Page load time is slow";
+            
+            if (ruleId === "button-name") return "Buttons need accessible names";
+            if (ruleId === "image-alt") return "Images need alternative text";
+            if (ruleId === "link-name") return "Links need discernible text";
+            if (ruleId === "label") return "Form elements need labels";
+            if (ruleId === "document-title") return "Document must have a title";
+            if (ruleId === "html-has-lang") return "HTML must have a language attribute";
+            
+            const descLower = description.toLowerCase();
+            if (descLower.includes("contrast")) return "Text contrast is too low";
+            if (descLower.includes("tap target") || descLower.includes("touch target") || descLower.includes("size")) return "Touch target is too small";
+            if (descLower.includes("label")) return "Form field is missing a label";
+            if (descLower.includes("broken link")) return "Broken link detected";
+            
+            if (ruleId) {
+                return ruleId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+            }
+            return description.substring(0, 50) + (description.length > 50 ? "..." : "");
+        }
+
+        function getIssueImpact(issue) {
+            const ruleId = issue.ruleId || "";
+            const description = issue.description || "";
+            
+            if (ruleId === "color-contrast") return "Low contrast can make this text difficult to read.";
+            if (ruleId === "small-touch-target" || ruleId === "target-size") return "Small touch areas can cause mis-taps on mobile.";
+            if (ruleId === "missing-label" || ruleId === "label") return "Form field lacks a label, making it hard to fill out.";
+            if (ruleId === "broken-link") return "Users will encounter a dead end or error page.";
+            if (ruleId === "slow-load-time") return "Slow loading increases bounce rates and harms user experience.";
+            
+            if (ruleId === "button-name") return "Screen reader users may not understand what this button does.";
+            if (ruleId === "image-alt") return "Screen readers cannot describe this image to visually impaired users.";
+            if (ruleId === "link-name") return "Screen readers cannot announce where this link goes.";
+            
+            const descLower = description.toLowerCase();
+            if (descLower.includes("contrast")) return "Low contrast can make this text difficult to read.";
+            if (descLower.includes("tap target") || descLower.includes("touch target") || descLower.includes("size")) return "Small touch areas can cause mis-taps on mobile.";
+            if (descLower.includes("label")) return "Form field lacks a label, making it hard to fill out.";
+            if (descLower.includes("broken link")) return "Users will encounter a dead end or error page.";
+            
+            return "This issue affects usability or accessibility standards.";
+        }
+
+        function shouldShowFixBadge(status) {
+            return ["success", "failed", "pending"].includes((status || "").toLowerCase());
+        }
+
+        function formatSelector(selector) {
+            if (!selector) return "";
+            if (selector.length > 50) return selector.substring(0, 50) + "...";
+            return selector;
+        }
+
+        function getScoreLabel(score) {
+            if (score >= 90) return { label: "Excellent", color: "text-emerald-400 bg-emerald-950/40 border-emerald-900/60", desc: "The site meets standard usability and accessibility requirements." };
+            if (score >= 75) return { label: "Good", color: "text-amber-400 bg-amber-950/40 border-amber-900/60", desc: "The site is generally usable but has several areas for improvement." };
+            if (score >= 50) return { label: "Needs Work", color: "text-orange-400 bg-orange-950/40 border-orange-900/60", desc: "Usability is compromised. Multiple serious accessibility barriers found." };
+            return { label: "High Risk", color: "text-red-400 bg-red-950/40 border-red-900/60", desc: "Severe critical failures detected. The interface is difficult to navigate." };
+        }
+
+        function getSummarySentence(issues) {
+            if (issues.length === 0) {
+                return "Great job! No usability or accessibility issues were detected on this page.";
+            }
+            const wcagCount = issues.filter(i => i.source === "axe-core").length;
+            const customCount = issues.filter(i => i.source === "custom_heuristic").length;
+            
+            if (wcagCount > customCount) {
+                return `Most findings are high-confidence WCAG accessibility issues related to contrast or screen-reader usability.`;
+            } else if (customCount > wcagCount) {
+                return `Most findings are custom UX suggestions to improve visual structure and touch target sizes.`;
+            } else {
+                return `Findings are split between WCAG accessibility issues and custom UX suggestions.`;
+            }
+        }
+
+        function getConfidenceLabel(confidence) {
+            const clean = (confidence || "medium").toLowerCase();
+            if (clean === "high") return "High confidence";
+            if (clean === "medium") return "Medium confidence";
+            return "Low confidence";
+        }
+
+        function getSourceLabel(source) {
+            if (source === 'axe-core') return "WCAG / axe-core";
+            if (source === 'custom_heuristic') return "Custom UX Rule";
+            if (source === 'llm') return "AI Suggestion";
+            if (source === 'merged') return "Merged Findings";
+            return source;
+        }
+
+        function hasFixDiff(issue) {
+            return !!(issue.fixDiff && issue.fixDiff.original && issue.fixDiff.patched);
+        }
+
+        function hasScreenshots(issue) {
+            return !!(issue.screenshots && issue.screenshots.length > 0);
+        }
+
+        function toggleIssue(id) {
+            if (expandedIssueId === id) {
+                expandedIssueId = null;
+            } else {
+                expandedIssueId = id;
+                activeTab = "overview";
+            }
+            renderIssues(allIssues);
+        }
+
+        function switchTab(event, tabName) {
+            event.stopPropagation();
+            activeTab = tabName;
+            renderIssues(allIssues);
+        }
+
+        function getActiveStepId(status, progress = []) {
+            if (status === 'queued') return 'queued';
+            if (status === 'failed') {
+                const lastLogs = progress.slice(-3).join('\n').toLowerCase();
+                if (lastLogs.includes('saving') || lastLogs.includes('saved') || lastLogs.includes('prepare')) return 'preparing';
+                if (lastLogs.includes('suggestion') || lastLogs.includes('patch') || lastLogs.includes('fix')) return 'fixes';
+                if (lastLogs.includes('calculating') || lastLogs.includes('score')) return 'score';
+                if (lastLogs.includes('grouping') || lastLogs.includes('deduplicat')) return 'grouping';
+                if (lastLogs.includes('heuristic')) return 'heuristics';
+                if (lastLogs.includes('axe-core') || lastLogs.includes('wcag')) return 'wcag';
+                if (lastLogs.includes('capturing') || lastLogs.includes('screenshot') || lastLogs.includes('dom')) return 'capturing';
+                if (lastLogs.includes('navigating') || lastLogs.includes('opening') || lastLogs.includes('browser')) return 'opening';
+            }
+            
+            const logsStr = progress.join('\n').toLowerCase();
+            if (logsStr.includes('saved report') || logsStr.includes('completed successfully')) return 'preparing';
+            if (logsStr.includes('generating fix suggestions') || logsStr.includes('generating patches')) return 'fixes';
+            if (logsStr.includes('calculating ux score') || logsStr.includes('score calculated')) return 'score';
+            if (logsStr.includes('grouping duplicate findings') || logsStr.includes('deduplicating')) return 'grouping';
+            if (logsStr.includes('running custom ux heuristic') || logsStr.includes('custom_heuristic')) return 'heuristics';
+            if (logsStr.includes('running wcag') || logsStr.includes('axe-core')) return 'wcag';
+            if (logsStr.includes('capturing screenshot') || logsStr.includes('dom snapshot')) return 'capturing';
+            if (logsStr.includes('navigating to') || logsStr.includes('opening website') || logsStr.includes('browser-use')) return 'opening';
+            
+            if (progress.length > 3) return 'capturing';
+            if (progress.length > 1) return 'opening';
+            return 'queued';
+        }
+
+        function getStepStatus(stepId, status, progress = []) {
+            const activeId = getActiveStepId(status, progress);
+            const stepOrder = ["queued", "opening", "capturing", "wcag", "heuristics", "grouping", "score", "fixes", "preparing"];
+            const stepIdx = stepOrder.indexOf(stepId);
+            const activeIdx = stepOrder.indexOf(activeId);
+            
+            if (status === 'completed') return 'completed';
+            
+            if (stepIdx < activeIdx) return 'completed';
+            if (stepIdx === activeIdx) return status === 'failed' ? 'failed' : 'active';
+            return 'pending';
+        }
+
+        function updateTimeline(status, progress = []) {
+            const activeId = getActiveStepId(status, progress);
+            const activeStep = STEPS.find(s => s.id === activeId);
+            
+            const badgeLabel = document.getElementById('active-step-label');
+            if (badgeLabel && activeStep) {
+                badgeLabel.innerText = status === 'failed' ? 'Failed: ' + activeStep.label : activeStep.label;
+            }
+            
+            const stepsContainer = document.getElementById('timeline-steps');
+            if (!stepsContainer) return;
+            
+            stepsContainer.innerHTML = STEPS.map(step => {
+                const stepStatus = getStepStatus(step.id, status, progress);
+                
+                let iconHtml = '';
+                if (stepStatus === 'completed') {
+                    iconHtml = `
+                        <div class="absolute -left-[41px] top-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-[#0b0f19] shadow-sm">
+                            <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                    `;
+                } else if (stepStatus === 'active') {
+                    iconHtml = `
+                        <div class="absolute -left-[41px] top-1.5 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center border-2 border-[#0b0f19] shadow-sm">
+                            <div class="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                    `;
+                } else if (stepStatus === 'failed') {
+                    iconHtml = `
+                        <div class="absolute -left-[41px] top-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-2 border-[#0b0f19] shadow-sm">
+                            <svg class="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </div>
+                    `;
+                } else {
+                    iconHtml = `
+                        <div class="absolute -left-[41px] top-1.5 w-5 h-5 bg-gray-800 rounded-full flex items-center justify-center border-2 border-gray-700">
+                            <div class="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
+                        </div>
+                    `;
+                }
+                
+                const isPending = stepStatus === 'pending';
+                const isActive = stepStatus === 'active';
+                const isFailed = stepStatus === 'failed';
+                
+                return `
+                    <div class="relative transition duration-200">
+                        ${iconHtml}
+                        <div class="${isPending ? 'opacity-40' : 'opacity-100'}">
+                            <h4 class="text-xs font-bold ${isActive ? 'text-blue-400 animate-pulse' : isFailed ? 'text-red-400 font-extrabold' : 'text-gray-200'}">${step.label}</h4>
+                            ${isActive ? `<p class="text-[10px] text-gray-400 mt-0.5 leading-relaxed">${STEP_HELPERS[step.id]}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
 
         document.getElementById('audit-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -390,6 +631,10 @@ HTML_DASHBOARD = """
             document.getElementById('progress-logs').innerHTML = "";
             document.getElementById('report-view').classList.add('hidden');
             allIssues = [];
+            expandedIssueId = null;
+            
+            // Set initial timeline view
+            updateTimeline('queued', []);
 
             try {
                 const response = await fetch('/audit', {
@@ -425,15 +670,21 @@ HTML_DASHBOARD = """
                         .join('');
                     logsBox.scrollTop = logsBox.scrollHeight;
 
+                    // Update timeline
+                    updateTimeline(data.status, data.progress || []);
+
                     if (data.status === 'completed') {
                         clearInterval(auditInterval);
                         showReport(data);
                     } else if (data.status === 'failed') {
                         clearInterval(auditInterval);
-                        alert("Audit failed. Check logs.");
+                        updateTimeline('failed', data.progress || []);
                         document.getElementById('submit-btn').disabled = false;
                         document.getElementById('submit-btn').innerText = "Launch Audit Agent";
                         document.getElementById('status-bar').classList.add('hidden');
+                        
+                        // Render error in the raw logs
+                        logsBox.innerHTML += `<div class="text-red-400 py-1 font-bold">ERROR: ${data.errorMessage || "Execution aborted"}</div>`;
                     }
                 } catch (err) {
                     console.error("Progress polling error:", err);
@@ -451,19 +702,30 @@ HTML_DASHBOARD = """
             document.getElementById('report-url').innerText = data.url;
             document.getElementById('report-score').innerText = data.score !== null ? data.score : 'N/A';
             
-            // Set score color
+            // Set score color and label
             const scoreVal = data.score || 0;
             const scoreEl = document.getElementById('report-score');
-            if (scoreVal >= 90) {
-                scoreEl.className = "text-4xl font-extrabold text-green-400";
-            } else if (scoreVal >= 70) {
-                scoreEl.className = "text-4xl font-extrabold text-yellow-400";
-            } else {
-                scoreEl.className = "text-4xl font-extrabold text-red-500";
-            }
+            const scoreLabelEl = document.getElementById('report-score-label');
+            const scoreInfo = getScoreLabel(scoreVal);
+            
+            scoreEl.className = "text-4xl font-extrabold text-white";
+            scoreLabelEl.innerText = scoreInfo.label;
+            scoreLabelEl.className = `mt-2 inline-block px-2.5 py-0.5 rounded-full font-bold text-[9px] uppercase border ${scoreInfo.color}`;
 
             allIssues = data.issues || [];
-            document.getElementById('report-count').innerText = allIssues.length;
+            expandedIssueId = null;
+            
+            // Calculate and display dynamic summary metrics
+            const wcagCount = allIssues.filter(i => i.source === "axe-core").length;
+            const uxCount = allIssues.filter(i => i.source === "custom_heuristic" || i.source === "llm").length;
+            const groupedCount = allIssues.filter(i => i.sampleElements && i.sampleElements.length > 1).length;
+            const verifiedCount = allIssues.filter(i => i.verifiedFixStatus === "success").length;
+
+            document.getElementById('report-wcag-count').innerText = wcagCount;
+            document.getElementById('report-ux-count').innerText = uxCount;
+            document.getElementById('report-grouped-count').innerText = groupedCount;
+            document.getElementById('report-verified-count').innerText = verifiedCount;
+            document.getElementById('report-summary-text').innerText = `${getSummarySentence(allIssues)} ${scoreInfo.desc}`;
             
             renderIssues(allIssues);
 
@@ -482,7 +744,7 @@ HTML_DASHBOARD = """
 
             if (issues.length === 0) {
                 listEl.innerHTML = `
-                    <div class="glass-panel p-6 text-center rounded-2xl text-gray-500">
+                    <div class="glass-panel p-6 text-center rounded-2xl text-gray-500 border border-gray-900">
                         No issues found matching this criteria!
                     </div>
                 `;
@@ -490,9 +752,22 @@ HTML_DASHBOARD = """
             }
 
             issues.forEach(issue => {
+                const isExpanded = expandedIssueId === issue.id;
                 const card = document.createElement('div');
-                card.onclick = () => openModal(issue);
-                card.className = "glass-panel p-5 rounded-2xl shadow hover:shadow-xl transition cursor-pointer hover:border-gray-700/80 duration-150 flex flex-col space-y-3";
+                card.setAttribute('data-issue-id', issue.id);
+                card.setAttribute('role', 'button');
+                card.setAttribute('tabindex', '0');
+                card.onclick = () => toggleIssue(issue.id);
+                card.onkeydown = (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleIssue(issue.id);
+                    }
+                };
+
+                card.className = `glass-panel p-5 rounded-2xl shadow transition text-left cursor-pointer hover:border-gray-700/80 duration-150 flex flex-col space-y-2.5 border ${
+                    isExpanded ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-800/80 hover:shadow-xl'
+                }`;
                 
                 // Set badge colors
                 let severityColor = "bg-blue-950/40 text-blue-400 border border-blue-900/60";
@@ -500,46 +775,238 @@ HTML_DASHBOARD = """
                 else if (issue.severity === 'serious') severityColor = "bg-orange-950/40 text-orange-400 border border-orange-900/60";
                 else if (issue.severity === 'moderate') severityColor = "bg-yellow-950/40 text-yellow-400 border border-yellow-900/60";
 
-                let sourceLabel = issue.source || "deterministic";
+                let sourceLabel = getSourceLabel(issue.source);
                 let sourceColor = "bg-blue-950/30 text-blue-300 border border-blue-900/40";
                 if (issue.source === 'axe-core') {
-                    sourceLabel = "WCAG / axe-core";
                     sourceColor = "bg-blue-950/45 text-blue-400 border border-blue-900/60";
                 } else if (issue.source === 'custom_heuristic') {
-                    sourceLabel = "Custom UX Rule";
                     sourceColor = "bg-teal-950/45 text-teal-400 border border-teal-900/60";
                 } else if (issue.source === 'llm') {
-                    sourceLabel = "AI Suggestion";
                     sourceColor = "bg-purple-950/45 text-purple-400 border border-purple-900/60";
                 } else if (issue.source === 'merged') {
-                    sourceLabel = "Merged Findings";
                     sourceColor = "bg-indigo-950/45 text-indigo-400 border border-indigo-900/60";
                 }
 
-                let confidenceColor = "bg-gray-950/40 text-gray-400 border border-gray-900";
-                let confidenceLabel = issue.confidence || "medium";
-                if (confidenceLabel === 'high') confidenceColor = "bg-green-950/45 text-green-400 border border-green-900/60";
-                else if (confidenceLabel === 'medium') confidenceColor = "bg-yellow-950/45 text-yellow-400 border border-yellow-900/60";
+                let confidenceColor = "bg-blue-950/45 text-blue-400 border border-blue-900/60";
+                let confidenceLabel = "Low confidence";
+                const cleanConf = (issue.confidence || "medium").toLowerCase();
+                if (cleanConf === 'high') {
+                    confidenceColor = "bg-emerald-950/45 text-emerald-400 border border-emerald-900/60";
+                    confidenceLabel = "High confidence";
+                } else if (cleanConf === 'medium') {
+                    confidenceColor = "bg-amber-950/45 text-amber-400 border border-amber-900/60";
+                    confidenceLabel = "Medium confidence";
+                }
 
                 const isGrouped = issue.sampleElements && issue.sampleElements.length > 1;
+                const showFix = shouldShowFixBadge(issue.verifiedFixStatus);
+
+                let inlineDetailsHtml = "";
+                if (isExpanded) {
+                    let tabOverviewClass = activeTab === 'overview' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-800 text-gray-400 hover:bg-gray-700';
+                    let tabEvidenceClass = activeTab === 'evidence' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-800 text-gray-400 hover:bg-gray-700';
+                    let tabFixClass = activeTab === 'fix' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-800 text-gray-400 hover:bg-gray-700';
+
+                    let tabContent = "";
+                    if (activeTab === 'overview') {
+                        tabContent = `
+                            <div class="space-y-4 pt-2">
+                                <div class="space-y-1">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Problem</span>
+                                    <p class="text-xs text-gray-300 leading-relaxed bg-black/20 border border-gray-850 p-2.5 rounded">${issue.description}</p>
+                                </div>
+                                <div class="space-y-1">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Why It Matters</span>
+                                    <p class="text-xs text-gray-400 bg-black/25 border border-gray-850 rounded-xl p-3 italic leading-relaxed">
+                                        ${getIssueImpact(issue)}
+                                    </p>
+                                </div>
+                                ${issue.fixSuggestion ? `
+                                    <div class="space-y-1">
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Recommended Fix</span>
+                                        <p class="text-xs text-gray-300 leading-relaxed">${issue.fixSuggestion}</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    } else if (activeTab === 'evidence') {
+                        let evidenceTable = `
+                            <div class="border border-gray-855 rounded-xl overflow-hidden bg-black/25 text-xs mt-2">
+                                <div class="grid grid-cols-3 border-b border-gray-900 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1 flex flex-col">
+                                        <span>Selector</span>
+                                        <span class="text-[9px] text-gray-600 font-normal normal-case leading-tight">The CSS path of the affected page element.</span>
+                                    </span>
+                                    <span class="text-gray-350 col-span-2 font-mono break-all bg-black/30 p-1.5 rounded border border-gray-900 select-all">${issue.elementSelector || "Global"}</span>
+                                </div>
+                                <div class="grid grid-cols-3 border-b border-gray-900 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1">Rule ID</span>
+                                    <span class="text-gray-355 col-span-2 font-mono">${issue.ruleId || "N/A"}</span>
+                                </div>
+                                <div class="grid grid-cols-3 border-b border-gray-900 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1">Source</span>
+                                    <span class="text-gray-355 col-span-2 capitalize">${getSourceLabel(issue.source)}</span>
+                                </div>
+                                <div class="grid grid-cols-3 border-b border-gray-900 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1 flex flex-col">
+                                        <span>Confidence</span>
+                                        <span class="text-[9px] text-gray-600 font-normal normal-case leading-tight">How certain the system is based on rule source and available evidence.</span>
+                                    </span>
+                                    <span class="text-gray-355 col-span-2 capitalize font-semibold">${getConfidenceLabel(issue.confidence)}</span>
+                                </div>
+                        `;
+                        if (issue.viewport) {
+                            evidenceTable += `
+                                <div class="grid grid-cols-3 border-b border-gray-900 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1">Viewport</span>
+                                    <span class="text-gray-355 col-span-2 capitalize font-semibold">${issue.viewport}</span>
+                                </div>
+                            `;
+                        }
+                        if (issue.pageUrl) {
+                            evidenceTable += `
+                                <div class="grid grid-cols-3 border-b border-gray-900 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1">Page URL</span>
+                                    <a href="${issue.pageUrl}" target="_blank" class="text-blue-400 hover:underline break-all col-span-2">${issue.pageUrl}</a>
+                                </div>
+                            `;
+                        }
+                        if (issue.actualValue) {
+                            evidenceTable += `
+                                <div class="grid grid-cols-3 p-2.5">
+                                    <span class="text-gray-500 font-semibold col-span-1">Measured values</span>
+                                    <div class="text-gray-300 col-span-2 space-y-0.5">
+                                        <div><strong>Actual:</strong> ${issue.actualValue}</div>
+                                        ${issue.expectedValue ? `<div><strong>Expected:</strong> ${issue.expectedValue}</div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        evidenceTable += `</div>`;
+
+                        let elementsHtml = "";
+                        if (issue.sampleElements && issue.sampleElements.length > 0) {
+                            elementsHtml = `
+                                <div class="space-y-2 mt-4">
+                                    <span class="block text-[10px] uppercase text-gray-500 font-semibold mb-2">Affected HTML Elements (${issue.sampleElements.length})</span>
+                                    <div class="max-h-36 overflow-y-auto space-y-2 bg-black/40 border border-gray-800 rounded-xl p-2.5 text-xs font-mono text-gray-300">
+                                        ${issue.sampleElements.map((el, i) => `
+                                            <div class="bg-black/30 p-2.5 rounded border border-gray-900/60">
+                                                <span class="text-purple-450 block break-all font-semibold">${el.selector}</span>
+                                                ${el.text ? `<span class="text-gray-400 font-sans block mt-1">InnerText: "${el.text}"</span>` : ''}
+                                                ${el.width || el.height ? `<span class="text-gray-455 font-sans block mt-0.5">Size: ${el.width}x${el.height}px</span>` : ''}
+                                                ${el.html ? `<pre class="text-[10px] text-gray-550 mt-1.5 border-t border-gray-900 pt-1 overflow-x-auto whitespace-pre-wrap break-all">${el.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>` : ''}
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+
+                        tabContent = `
+                            <div class="space-y-4 pt-2">
+                                ${evidenceTable}
+                                ${elementsHtml}
+                            </div>
+                        `;
+                    } else if (activeTab === 'fix') {
+                        let fixHtml = "";
+                        if (hasFixDiff(issue)) {
+                            fixHtml = `
+                                <div class="space-y-2">
+                                    <span class="block text-xs uppercase text-gray-500 font-semibold mb-1.5">Suggested Code Fix (Original vs Patched)</span>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div class="bg-red-955/20 border border-red-900/40 rounded-xl p-4 flex flex-col">
+                                            <span class="text-xs font-bold text-red-400 mb-1.5">Original Code</span>
+                                            <pre class="text-[10px] text-gray-300 font-mono overflow-auto max-h-36 whitespace-pre-wrap">${issue.fixDiff.original}</pre>
+                                        </div>
+                                        <div class="bg-green-955/20 border border-green-900/40 rounded-xl p-4 flex flex-col">
+                                            <span class="text-xs font-bold text-green-400 mb-1.5">Suggested Fix</span>
+                                            <pre class="text-[10px] text-gray-300 font-mono overflow-auto max-h-36 whitespace-pre-wrap">${issue.fixDiff.patched}</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            fixHtml = `
+                                <div class="bg-blue-955/20 border border-blue-900/40 rounded-xl p-4 text-xs text-blue-300 leading-relaxed font-sans">
+                                    <p class="font-bold mb-1 uppercase tracking-wider text-[10px] text-blue-400">Manual Fix Recommended</p>
+                                    <p>${issue.fixSuggestion || "No automated code fix patch is available for this issue. Inspect the HTML elements and resolve manually."}</p>
+                                </div>
+                            `;
+                        }
+
+                        let screenshotHtml = "";
+                        if (hasScreenshots(issue)) {
+                            screenshotHtml = `
+                                <div class="mt-4 pt-4 border-t border-gray-900">
+                                    <span class="block text-xs uppercase text-gray-500 font-semibold mb-2">Visual Proof (Screenshots)</span>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        ${issue.screenshots.map(shot => `
+                                            <div class="border border-gray-800 rounded-xl overflow-hidden bg-black/30 shadow flex flex-col">
+                                                <span class="text-[10px] font-bold text-gray-400 block p-2 bg-black/40 border-b border-gray-900 uppercase tracking-wider">
+                                                    ${shot.type.toLowerCase()} Screen
+                                                </span>
+                                                <div class="p-2 flex items-center justify-center bg-gray-950 flex-1 min-h-24">
+                                                    <img src="${shot.url}" alt="${shot.type} Screenshot" class="max-h-36 max-w-full object-contain rounded" />
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+
+                        tabContent = `
+                            <div class="space-y-4 pt-2">
+                                ${fixHtml}
+                                ${screenshotHtml}
+                            </div>
+                        `;
+                    }
+
+                    inlineDetailsHtml = `
+                        <div class="mt-4 pt-4 border-t border-gray-800 space-y-4" onclick="event.stopPropagation()">
+                            <!-- Tab Headers -->
+                            <div class="flex gap-2 border-b border-gray-900 pb-2">
+                                <button type="button" onclick="switchTab(event, 'overview')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${tabOverviewClass}">Overview</button>
+                                <button type="button" onclick="switchTab(event, 'evidence')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${tabEvidenceClass}">Evidence</button>
+                                <button type="button" onclick="switchTab(event, 'fix')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${tabFixClass}">Fix Suggestion</button>
+                            </div>
+                            <!-- Tab Content -->
+                            <div class="animate-fadeIn">
+                                ${tabContent}
+                            </div>
+                        </div>
+                    `;
+                }
 
                 card.innerHTML = `
-                    <div class="flex items-center space-x-2.5 flex-wrap gap-y-1">
-                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${severityColor}">${issue.severity}</span>
-                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${sourceColor}">${sourceLabel}</span>
-                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${confidenceColor}">Conf: ${confidenceLabel}</span>
-                        ${isGrouped ? `<span class="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase bg-gray-900 text-purple-300 border border-purple-950">Grouped (${issue.sampleElements.length})</span>` : ''}
-                        ${issue.verifiedFixStatus === 'success' ? '<span class="text-xs text-green-400 font-bold">✓ Fix Verified</span>' : ''}
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center space-x-2 flex-wrap gap-y-1 mb-2">
+                                <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase ${severityColor}">${issue.severity}</span>
+                                <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase ${sourceColor}">${sourceLabel}</span>
+                                <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase ${confidenceColor}">${confidenceLabel}</span>
+                                ${isGrouped ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-900 text-purple-300 border border-purple-950">Grouped (${issue.sampleElements.length})</span>` : ''}
+                                ${showFix && issue.verifiedFixStatus === 'success' ? '<span class="text-[10px] text-green-400 font-bold ml-1">✓ Fix Verified</span>' : ''}
+                            </div>
+                            <h3 class="text-sm font-bold text-gray-100">${getIssueTitle(issue)}</h3>
+                            <p class="text-xs text-gray-400 leading-normal mt-1">${getIssueImpact(issue)}</p>
+                        </div>
+                        <div class="text-gray-500 mt-1 flex-shrink-0">
+                            <svg class="w-4 h-4 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
                     </div>
-                    <p class="text-sm text-gray-200 line-clamp-2">${issue.description}</p>
-                    ${issue.elementSelector ? `<code class="text-xs text-purple-400 font-mono truncate max-w-full block bg-black/30 p-1.5 rounded">${issue.elementSelector}</code>` : ''}
+                    ${inlineDetailsHtml}
                 `;
                 listEl.appendChild(card);
             });
         }
 
         function filterIssues(severity) {
-            // Update active filter button style
             const filterBtns = document.querySelectorAll('.filter-btn');
             filterBtns.forEach(btn => {
                 btn.classList.remove('bg-blue-600', 'text-white');
@@ -553,109 +1020,7 @@ HTML_DASHBOARD = """
             } else {
                 renderIssues(allIssues.filter(i => i.severity === severity));
             }
-        }
-
-        // Modal Handlers
-        function openModal(issue) {
-            const modal = document.getElementById('issue-modal');
-            document.getElementById('modal-title').innerText = issue.description.substring(0, 50) + "...";
-            document.getElementById('modal-desc').innerText = issue.description;
-            document.getElementById('modal-justification').innerText = issue.severityJustification || "No justification provided.";
-            document.getElementById('modal-selector').innerText = issue.elementSelector || "Global";
-            
-            const severityEl = document.getElementById('modal-severity');
-            severityEl.innerText = issue.severity.toUpperCase();
-            if (issue.severity === 'critical') severityEl.className = "inline-block px-3 py-1 rounded-full font-bold text-xs bg-red-950/40 text-red-400 border border-red-900/60";
-            else if (issue.severity === 'serious') severityEl.className = "inline-block px-3 py-1 rounded-full font-bold text-xs bg-orange-950/40 text-orange-400 border border-orange-900/60";
-            else if (issue.severity === 'moderate') severityEl.className = "inline-block px-3 py-1 rounded-full font-bold text-xs bg-yellow-950/40 text-yellow-400 border border-yellow-900/60";
-            else severityEl.className = "inline-block px-3 py-1 rounded-full font-bold text-xs bg-blue-950/40 text-blue-400 border border-blue-900/60";
-
-            document.getElementById('modal-category').innerText = issue.category;
-            
-            // Source & Confidence & Evidence display in modal:
-            let detailSection = document.getElementById('modal-evidence-section');
-            if (!detailSection) {
-                detailSection = document.createElement('div');
-                detailSection.id = 'modal-evidence-section';
-                const selectorBlock = document.getElementById('modal-selector').parentElement;
-                selectorBlock.insertAdjacentElement('afterend', detailSection);
-            }
-            
-            let evidenceHtml = `
-                <div class="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Source</span>
-                        <span class="text-gray-300 capitalize">${issue.source || 'deterministic'}</span>
-                    </div>
-                    <div>
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Confidence</span>
-                        <span class="text-gray-300 capitalize">${issue.confidence || 'medium'}</span>
-                    </div>
-                </div>
-            `;
-            if (issue.viewport) {
-                evidenceHtml += `
-                    <div class="mt-4">
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Viewport</span>
-                        <span class="text-gray-300 capitalize">${issue.viewport}</span>
-                    </div>
-                `;
-            }
-            if (issue.pageUrl) {
-                evidenceHtml += `
-                    <div class="mt-4">
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Page URL</span>
-                        <a href="${issue.pageUrl}" target="_blank" class="text-blue-400 hover:underline break-all text-xs">${issue.pageUrl}</a>
-                    </div>
-                `;
-            }
-            if (issue.actualValue) {
-                evidenceHtml += `
-                    <div class="mt-4">
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-1">Evidence (Actual vs Expected)</span>
-                        <div class="bg-black/40 border border-gray-800 rounded-xl p-3 text-xs space-y-1 text-gray-300">
-                            <div><strong>Actual:</strong> ${issue.actualValue}</div>
-                            ${issue.expectedValue ? `<div><strong>Expected:</strong> ${issue.expectedValue}</div>` : ''}
-                        </div>
-                    </div>
-                `;
-            }
-            if (issue.sampleElements && issue.sampleElements.length > 0) {
-                evidenceHtml += `
-                    <div class="mt-4">
-                        <span class="block text-xs uppercase text-gray-500 font-semibold mb-2">Affected Elements (${issue.sampleElements.length})</span>
-                        <div class="max-h-36 overflow-y-auto space-y-2 bg-black/40 border border-gray-800 rounded-xl p-2.5 text-xs font-mono text-gray-300">
-                            ${issue.sampleElements.map((el, i) => `
-                                <div class="bg-black/30 p-2 rounded border border-gray-900/60">
-                                    <span class="text-purple-450 block break-all">${el.selector}</span>
-                                    ${el.text ? `<span class="text-gray-400 font-sans block mt-0.5">Text: "${el.text}"</span>` : ''}
-                                    ${el.width || el.height ? `<span class="text-gray-450 font-sans block mt-0.5">Size: ${el.width}x${el.height}px</span>` : ''}
-                                    ${el.html ? `<pre class="text-[10px] text-gray-500 mt-1 border-t border-gray-900 pt-1 overflow-x-auto whitespace-pre-wrap break-all">${el.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-            detailSection.innerHTML = evidenceHtml;
-            
-            // Set code diffs
-            if (issue.fixDiff && issue.fixDiff.original && issue.fixDiff.patched) {
-                document.getElementById('modal-fix-section').style.display = 'block';
-                document.getElementById('modal-original-code').innerText = issue.fixDiff.original;
-                document.getElementById('modal-patched-code').innerText = issue.fixDiff.patched;
-            } else {
-                document.getElementById('modal-fix-section').style.display = 'none';
-            }
-
-            modal.classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('issue-modal').classList.add('hidden');
-        }
-
-        // Chat logic
+        }        // Chat logic
         document.getElementById('chat-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const inputEl = document.getElementById('chat-input');
@@ -711,12 +1076,12 @@ HTML_DASHBOARD = """
                     citedIssueIds.map(id => {
                         const targetIssue = allIssues.find(i => i.id === id);
                         const label = targetIssue ? targetIssue.severity.substring(0, 3).toUpperCase() + ': ' + (targetIssue.elementSelector || 'Global').substring(0,10) + '...' : id.substring(0,8);
-                        return `<span onclick="highlightIssue('${id}')" class="cursor-pointer text-[10px] font-bold px-2 py-0.5 bg-gray-800 text-purple-400 border border-purple-900 rounded hover:bg-gray-700 hover:text-purple-300 transition">${label}</span>`;
+                        return `<span onclick="highlightIssue('${id}')" class="cursor-pointer text-[9px] font-bold px-2 py-0.5 bg-gray-900 text-purple-400 border border-purple-955 rounded hover:bg-gray-800 hover:text-purple-300 transition">${label}</span>`;
                     }).join('') + `</div>`;
             }
 
             msgEl.innerHTML = `
-                <div class="px-3.5 py-2.5 rounded-2xl max-w-[85%] shadow-md leading-relaxed text-sm ${
+                <div class="px-3.5 py-2.5 rounded-2xl max-w-[85%] shadow-md leading-relaxed text-xs ${
                     isUser 
                         ? 'bg-blue-600 text-white rounded-br-none' 
                         : 'bg-gray-900 text-gray-200 border border-gray-800 rounded-bl-none'
@@ -733,19 +1098,22 @@ HTML_DASHBOARD = """
         }
 
         function highlightIssue(id) {
-            const issue = allIssues.find(i => i.id === id);
-            if (issue) {
-                openModal(issue);
+            expandedIssueId = id;
+            activeTab = "overview";
+            renderIssues(allIssues);
+            
+            const card = document.querySelector(`[data-issue-id="${id}"]`);
+            if (card) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
 
         function formatMarkdownText(text) {
-            // Simple markdown formatter for bold and backticks
             return text
-                .replace(/\\n/g, '<br>')
-                .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
-                .replace(/`(.*?)`/g, '<code class="bg-black/35 px-1 rounded text-purple-300 font-mono text-xs">$1</code>');
-        }
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`/g, '&#96;')
+                .replace(/&#96;(.*?)&#96;/g, '<code class="bg-black/35 px-1 rounded text-purple-300 font-mono text-[10px]">$1</code>');
     </script>
 </body>
 </html>
