@@ -1,5 +1,6 @@
 import type { DeterministicFinding, LLMFinding, MergedIssue, Severity, IssueSource } from "@/types";
 import { randomUUID } from "crypto";
+import { calculateDiminishingScore } from "@/lib/remediation/deduplicate";
 
 const SEVERITY_ORDER: Record<Severity, number> = {
   critical: 4,
@@ -115,17 +116,5 @@ function mergeDescription(det: DeterministicFinding, llm: LLMFinding): string {
 }
 
 export function calculateOverallScore(issues: MergedIssue[]): number {
-  if (issues.length === 0) return 100;
-
-  let score = 100;
-  issues.forEach(issue => {
-    switch (issue.severity) {
-      case "critical": score -= 15; break;
-      case "serious": score -= 8; break;
-      case "moderate": score -= 4; break;
-      case "minor": score -= 1; break;
-    }
-  });
-
-  return Math.max(0, Math.min(100, score));
+  return calculateDiminishingScore(issues as any);
 }

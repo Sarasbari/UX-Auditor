@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { deduplicateIssues, calculateDiminishingScore } from "@/lib/remediation/deduplicate";
 
 /** Maximum time (ms) to poll FastAPI before declaring timeout. */
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -108,17 +109,20 @@ export async function executeAuditJob(auditRunId: string, url: string) {
     }
 
     // ── PROCESSING → COMPLETED ───────────────────────────────────
+    const dedupedIssues = deduplicateIssues(reportData.issues ?? []);
+    const calculatedScore = calculateDiminishingScore(dedupedIssues);
+
     await prisma.$transaction(async (tx) => {
       await tx.auditRun.update({
         where: { id: auditRunId },
         data: {
           status: "COMPLETED",
-          score: reportData.score,
+          score: calculatedScore,
           completedAt: new Date(),
         },
       });
 
-      for (const issue of reportData.issues ?? []) {
+      for (const issue of dedupedIssues) {
         await tx.issue.create({
           data: {
             id: issue.id,
@@ -143,7 +147,7 @@ export async function executeAuditJob(auditRunId: string, url: string) {
       }
     });
 
-    console.log(`[audit-job:${auditRunId}] COMPLETED — score ${reportData.score}`);
+    console.log(`[audit-job:${auditRunId}] COMPLETED — score ${calculatedScore}`);
   } catch (error) {
     // ── Catch-all: any unhandled error → FAILED ──────────────────
     const message =

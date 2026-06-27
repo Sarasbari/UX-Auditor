@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator } from "@/components/ui/badges";
@@ -66,6 +66,58 @@ function getUnsupportedReasonClient(issue: Issue): string {
   if (!FIXABLE_CONFIDENCE.includes(confidence)) return "Low confidence — manual verification needed";
   if (!issue.fixSuggestion && !issue.fixDiff && !issue.ruleId) return "No fix suggestion available";
   return "Not eligible for automated remediation";
+}
+
+function getRemediationEligibility(issue: Issue): {
+  type: "code" | "report" | "manual" | "unsupported";
+  label: string;
+  badgeClass: string;
+} {
+  const isFixable = isIssueFixable(issue);
+  const ruleId = issue.ruleId || "";
+  const source = (issue.source || "").toLowerCase();
+
+  const codeFixRules = [
+    "landmark-one-main",
+    "meta-viewport",
+    "button-name",
+    "link-name",
+    "label",
+    "missing-label",
+    "target-size",
+    "small-touch-target",
+    "color-contrast"
+  ];
+
+  if (isFixable && codeFixRules.includes(ruleId)) {
+    return {
+      type: "code",
+      label: "PR-Ready Code Fix",
+      badgeClass: "bg-emerald-100 text-emerald-850 border border-emerald-200",
+    };
+  }
+
+  if (isFixable) {
+    return {
+      type: "report",
+      label: "PR-Ready Report Fix",
+      badgeClass: "bg-blue-100 text-blue-850 border border-blue-200",
+    };
+  }
+
+  if (source === "llm" || source === "heuristic") {
+    return {
+      type: "manual",
+      label: "Manual Review Only",
+      badgeClass: "bg-amber-100 text-amber-850 border border-amber-200",
+    };
+  }
+
+  return {
+    type: "unsupported",
+    label: "Not Supported Yet",
+    badgeClass: "bg-gray-100 text-gray-700 border border-gray-200",
+  };
 }
 
 // ── HELPER FUNCTIONS ────────────────────────────────────────────────────────
@@ -313,6 +365,8 @@ export default function AuditPage() {
   // Upgraded remediation plan states
   const [remediationPlan, setRemediationPlan] = useState<UpgradedRemediationPlan | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [remediationMode, setRemediationMode] = useState<"browse" | "remediate">("browse");
+  const [wizardStep, setWizardStep] = useState<number>(1);
 
   const highlightIssue = (issueId: string) => {
     setExpandedIssueId(issueId);
@@ -492,6 +546,7 @@ export default function AuditPage() {
     setRemediationResult(null);
     setRemediationStep(null);
     setShowRemediationModal(true);
+    setWizardStep(githubConnected ? 2 : 1);
     if (githubConnected) loadRepos();
   }, [githubConnected, loadRepos]);
 
@@ -806,11 +861,28 @@ export default function AuditPage() {
             </div>
 
             <div className="md:col-span-3 space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Executive Summary</h2>
-                <p className="text-sm text-gray-600 mt-1 leading-relaxed">
-                  {getSummarySentence(audit.issues)} {scoreLabelInfo.desc}
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Executive Summary</h2>
+                  <p className="text-sm text-gray-600 mt-1 leading-relaxed">
+                    {getSummarySentence(audit.issues)} {scoreLabelInfo.desc}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setRemediationMode("remediate");
+                    const element = document.getElementById("issues-list-section");
+                    if (element) {
+                      element.scrollIntoView({ behavior: "smooth" });
+                    }
+                  }}
+                  className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition text-sm self-start sm:self-center"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+                  </svg>
+                  Create GitHub PR
+                </button>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
@@ -835,14 +907,73 @@ export default function AuditPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div id="issues-list-section" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── LEFT COLUMN: ISSUES LIST ── */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-150">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                <h2 className="font-bold text-gray-900">Usability Issues &amp; Suggestions</h2>
-                <span className="text-xs text-gray-500 font-semibold">{filteredIssues.length} issues listed</span>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-2 border-b">
+                <div>
+                  <h2 className="font-bold text-gray-900">Usability Issues &amp; Suggestions</h2>
+                  <span className="text-xs text-gray-500 font-semibold">{filteredIssues.length} issues listed</span>
+                </div>
+                
+                {/* Segmented Control Mode Switcher */}
+                <div className="inline-flex p-1 bg-gray-100 rounded-xl">
+                  <button
+                    onClick={() => setRemediationMode("browse")}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      remediationMode === "browse"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Review Issues
+                  </button>
+                  <button
+                    onClick={() => setRemediationMode("remediate")}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      remediationMode === "remediate"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Create PR
+                  </button>
+                </div>
               </div>
+
+              {/* Remediate Mode Introduction Banner */}
+              {remediationMode === "remediate" && (
+                <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 mb-5 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-emerald-700 text-lg">💡</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider">GitHub Remediation Selection</h4>
+                      <p className="text-xs text-emerald-700 mt-0.5 leading-relaxed">
+                        Select issues below and generate a remediation pull request in your repository. 
+                        UX-Auditor applies safe, high-confidence code fixes where possible and documents the rest inside a remediation report.
+                        Private repositories are supported through GitHub OAuth permissions.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Select All / Clear Buttons */}
+                  <div className="flex gap-2 border-t border-emerald-100/50 pt-3">
+                    <button
+                      onClick={selectAllFixable}
+                      className="px-3 py-1.5 bg-white border border-emerald-200 hover:border-emerald-300 text-emerald-800 hover:bg-emerald-50 rounded-lg text-xs font-bold transition"
+                    >
+                      Select all PR-ready issues
+                    </button>
+                    <button
+                      onClick={clearSelection}
+                      className="px-3 py-1.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-xs font-bold transition"
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-2.5 flex-wrap">
                 <button
@@ -869,7 +1000,30 @@ export default function AuditPage() {
             </div>
 
             <div className="space-y-3">
-              {filteredIssues.map((issue) => {
+              {remediationMode === "remediate" && audit.issues.filter(isIssueFixable).length === 0 ? (
+                <div className="bg-white rounded-xl p-8 border border-gray-150 text-center">
+                  <span className="text-3xl block mb-2">🔍</span>
+                  <h4 className="text-sm font-bold text-gray-900 mb-1">No automatic PR-ready issues found</h4>
+                  <p className="text-xs text-gray-500 mb-4 max-w-md mx-auto">
+                    All findings in this report require manual design or code review. 
+                    However, you can still generate a remediation report pull request containing the manual guidelines.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSelectedIssueIds(new Set(audit.issues.map(i => i.id)));
+                      openRemediationModal();
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm text-xs transition"
+                  >
+                    Create Remediation Report PR
+                  </button>
+                </div>
+              ) : filteredIssues.length === 0 ? (
+                <div className="bg-white rounded-xl p-8 border border-gray-150 text-center">
+                  <p className="text-gray-500 text-sm">No issues found matching this filter</p>
+                </div>
+              ) : (
+                filteredIssues.map((issue) => {
                 const issueTitle = getIssueTitle(issue);
                 const issueImpact = getIssueImpact(issue);
                 const showFixBadge = shouldShowFixBadge(issue.verifiedFixStatus);
@@ -877,6 +1031,7 @@ export default function AuditPage() {
 
                 const fixable = isIssueFixable(issue);
                 const isSelected = selectedIssueIds.has(issue.id);
+                const eligibility = getRemediationEligibility(issue);
 
                 return (
                   <div
@@ -897,25 +1052,32 @@ export default function AuditPage() {
                       }
                     }}
                     className={`bg-white rounded-xl p-5 shadow-sm border text-left cursor-pointer transition-all duration-200 ${
-                      isExpanded ? "ring-2 ring-blue-500 border-blue-500" : isSelected ? "ring-1 ring-emerald-400 border-emerald-300" : "border-gray-150 hover:shadow-md"
-                    }`}
+                      isExpanded ? "ring-2 ring-blue-500 border-blue-500" : isSelected ? "ring-2 ring-emerald-500 border-emerald-500" : "border-gray-150 hover:shadow-md"
+                    } ${remediationMode === "remediate" && !fixable ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       {/* Remediation checkbox */}
-                      <div className="flex-shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                        {fixable ? (
-                          <label className="flex items-center cursor-pointer" title="Include in GitHub remediation">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleIssueSelection(issue.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            />
-                          </label>
-                        ) : (
-                          <div className="w-4 h-4 rounded border border-gray-200 bg-gray-50 cursor-not-allowed" title={getUnsupportedReasonClient(issue)} />
-                        )}
-                      </div>
+                      {remediationMode === "remediate" && (
+                        <div className="flex-shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                          {fixable ? (
+                            <label className="flex items-center cursor-pointer" title="Include in GitHub remediation">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleIssueSelection(issue.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </label>
+                          ) : (
+                            <div 
+                              className="w-4 h-4 rounded border border-gray-200 bg-gray-50 cursor-not-allowed flex items-center justify-center text-[10px] text-gray-400" 
+                              title={`Unsupported: ${getUnsupportedReasonClient(issue)}`}
+                            >
+                              ✕
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -923,6 +1085,14 @@ export default function AuditPage() {
                           <SourceBadge source={issue.source} />
                           <ConfidenceBadge confidence={issue.confidence} />
                           {showFixBadge && <FixBadge status={issue.verifiedFixStatus} />}
+                          
+                          {/* Remediation Eligibility Badge */}
+                          {remediationMode === "remediate" && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${eligibility.badgeClass}`}>
+                              {eligibility.label}
+                            </span>
+                          )}
+
                           {issue.sampleElements && issue.sampleElements.length > 1 && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase">
                               Grouped ({issue.sampleElements.length})
@@ -1048,6 +1218,14 @@ export default function AuditPage() {
                                     <a href={issue.pageUrl!} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all col-span-2">{issue.pageUrl}</a>
                                   </div>
                                 )}
+                                {issue.sampleElements && issue.sampleElements.length > 1 && (
+                                  <div className="grid grid-cols-3 border-b border-gray-100 p-2.5 bg-emerald-50/10">
+                                    <span className="text-gray-400 font-semibold col-span-1">Grouped findings</span>
+                                    <span className="text-emerald-800 col-span-2 font-semibold font-sans">
+                                      {issue.sampleElements.length} elements grouped into this card
+                                    </span>
+                                  </div>
+                                )}
                                 {shouldShowTechnicalField(issue.actualValue) && (
                                   <div className="grid grid-cols-3 p-2.5">
                                     <span className="text-gray-400 font-semibold col-span-1">Measured values</span>
@@ -1141,13 +1319,8 @@ export default function AuditPage() {
                       </div>
                     )}
                   </div>
-                );
-              })}
-
-              {filteredIssues.length === 0 && (
-                <div className="bg-white rounded-xl p-8 border border-gray-150 text-center">
-                  <p className="text-gray-500 text-sm">No issues found matching this filter</p>
-                </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -1294,43 +1467,41 @@ export default function AuditPage() {
 
       {/* ── STICKY REMEDIATION BAR ── */}
       {selectedIssueIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                  <span className="text-emerald-700 font-bold text-sm">{selectedIssueIds.size}</span>
-                </div>
-                <span className="text-sm font-semibold text-gray-700">
-                  {selectedIssueIds.size === 1 ? "1 issue" : `${selectedIssueIds.size} issues`} selected
+        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-1/2 md:translate-x-1/2 bg-white/90 backdrop-blur-md border border-gray-200/80 shadow-[0_8px_32px_rgba(0,0,0,0.12)] z-50 rounded-2xl max-w-4xl w-[calc(100%-2rem)] mx-auto animate-slideUp">
+          <div className="px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-sm">
+                <span className="font-extrabold text-sm">{selectedIssueIds.size}</span>
+              </div>
+              <div>
+                <span className="text-sm font-bold text-gray-900 block">
+                  {selectedIssueIds.size === 1 ? "1 issue" : `${selectedIssueIds.size} issues`} selected for GitHub PR
+                </span>
+                <span className="text-[10px] text-gray-500 font-medium">
+                  Includes automatic framework fixes and manual review report
                 </span>
               </div>
-              <button
-                onClick={selectAllFixable}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Select all fixable
-              </button>
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
               <button
                 onClick={clearSelection}
-                className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                className="px-4 py-2 border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl text-xs font-bold transition flex-1 sm:flex-initial text-center cursor-pointer"
               >
                 Clear
               </button>
+              <button
+                onClick={openRemediationModal}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm hover:shadow transition active:scale-95 duration-150 text-xs flex items-center justify-center gap-2 flex-1 sm:flex-initial text-center cursor-pointer"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+                </svg>
+                Review &amp; Create PR
+              </button>
             </div>
-            <button
-              onClick={openRemediationModal}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition active:scale-95 duration-150 text-sm"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
-              </svg>
-              Create GitHub PR
-            </button>
           </div>
         </div>
       )}
-
       {/* ── REMEDIATION MODAL ── */}
       {showRemediationModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !remediationStep && setShowRemediationModal(false)}>
@@ -1346,11 +1517,11 @@ export default function AuditPage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900">Create GitHub PR</h3>
-                    <p className="text-xs text-gray-500">{selectedIssueIds.size} issue(s) selected for remediation</p>
+                    <p className="text-xs text-gray-500">{selectedIssueIds.size} {selectedIssueIds.size === 1 ? "issue" : "issues"} selected</p>
                   </div>
                 </div>
                 {!remediationStep && (
-                  <button onClick={() => setShowRemediationModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setShowRemediationModal(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -1358,6 +1529,43 @@ export default function AuditPage() {
                 )}
               </div>
             </div>
+
+            {/* Progress Header */}
+            {!remediationStep && (
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 w-full">
+                  {[
+                    { step: 1, label: "Connect" },
+                    { step: 2, label: "Repo" },
+                    { step: 3, label: "Branch" },
+                    { step: 4, label: "Review" }
+                  ].map((item, idx) => (
+                    <Fragment key={item.step}>
+                      {idx > 0 && <div className={`flex-1 h-0.5 ${wizardStep >= item.step ? "bg-emerald-500" : "bg-gray-200"}`} />}
+                      <div className="flex items-center gap-1">
+                        <div 
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            wizardStep === item.step 
+                              ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-100" 
+                              : wizardStep > item.step 
+                              ? "bg-emerald-100 text-emerald-800" 
+                              : "bg-gray-200 text-gray-500"
+                          }`}
+                        >
+                          {wizardStep > item.step ? "✓" : item.step}
+                        </div>
+                        <span className={`text-[10px] font-semibold hidden sm:inline ${wizardStep === item.step ? "text-gray-900 font-bold" : "text-gray-500"}`}>
+                          {item.label}
+                        </span>
+                      </div>
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+                </div>
+              </div>
+            )}
 
             <div className="p-6 space-y-5">
               {/* ── SUCCESS STATE ── */}
@@ -1391,7 +1599,7 @@ export default function AuditPage() {
                     href={remediationResult.prUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition text-sm"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition text-sm cursor-pointer"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
@@ -1400,7 +1608,7 @@ export default function AuditPage() {
                   </a>
                   <button
                     onClick={() => { setShowRemediationModal(false); setRemediationStep(null); setRemediationResult(null); clearSelection(); }}
-                    className="block mx-auto mt-3 text-sm text-gray-500 hover:text-gray-700"
+                    className="block mx-auto mt-3 text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
                   >
                     Close
                   </button>
@@ -1410,66 +1618,127 @@ export default function AuditPage() {
               {/* ── ERROR STATE ── */}
               {remediationStep === "error" && (
                 <div className="text-center py-4">
-                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-200">
                     <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </div>
-                  <h4 className="text-lg font-bold text-gray-900 mb-1">PR Creation Failed</h4>
+                  <h4 className="text-lg font-bold text-gray-900 mb-1">PR Generation Failed</h4>
                   <p className="text-sm text-red-600 mb-4">{remediationError}</p>
                   <button
-                    onClick={() => { setRemediationStep(null); setRemediationError(null); }}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm transition"
+                    onClick={() => { setRemediationStep(null); setRemediationError(null); setWizardStep(4); }}
+                    className="px-4 py-2 bg-gray-150 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm transition cursor-pointer"
                   >
                     Try Again
                   </button>
                 </div>
               )}
 
-              {/* ── LOADING STATE ── */}
+              {/* ── GENERATE PR PROGRESS STATE (Step 5) ── */}
               {remediationStep && remediationStep !== "complete" && remediationStep !== "error" && (
-                <div className="text-center py-8">
-                  <div className="animate-spin h-10 w-10 border-4 border-emerald-600 border-t-transparent rounded-full mx-auto mb-4" />
-                  <p className="text-sm font-semibold text-gray-700">
-                    {remediationStep === "creating_branch" && "Creating branch..."}
-                    {remediationStep === "committing" && "Committing remediation report..."}
-                    {remediationStep === "opening_pr" && "Opening pull request..."}
-                    {remediationStep === "connecting" && "Connecting to GitHub..."}
-                    {remediationStep === "loading_repos" && "Loading repositories..."}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">This may take a few seconds</p>
+                <div className="space-y-6 py-2">
+                  <div className="text-center">
+                    <div className="animate-spin h-10 w-10 border-4 border-emerald-600 border-t-transparent rounded-full mx-auto mb-4" />
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">Generating Pull Request...</h4>
+                    <p className="text-xs text-gray-500">This may take up to a minute. Please don't close the modal.</p>
+                  </div>
+
+                  <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-4 max-w-sm mx-auto shadow-inner">
+                    {[
+                      { label: "Detecting project framework", done: true },
+                      { label: "Planning code fixes", done: true },
+                      { 
+                        label: "Creating branch", 
+                        active: remediationStep === "creating_branch",
+                        done: ["committing", "opening_pr", "complete"].includes(remediationStep as any)
+                      },
+                      { 
+                        label: "Applying patches", 
+                        active: remediationStep === "committing",
+                        done: ["opening_pr", "complete"].includes(remediationStep as any)
+                      },
+                      { 
+                        label: "Creating commit", 
+                        active: remediationStep === "committing",
+                        done: ["opening_pr", "complete"].includes(remediationStep as any)
+                      },
+                      { 
+                        label: "Opening PR on GitHub", 
+                        active: remediationStep === "opening_pr",
+                        done: (remediationStep as any) === "complete"
+                      }
+                    ].map((stepItem, idx) => (
+                      <div key={idx} className="flex items-center gap-3 text-xs">
+                        {stepItem.done ? (
+                          <span className="text-emerald-600 font-bold text-sm">✓</span>
+                        ) : stepItem.active ? (
+                          <div className="animate-spin h-3.5 w-3.5 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                        ) : (
+                          <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-200" />
+                        )}
+                        <span className={`${stepItem.done ? "text-gray-950 font-semibold" : stepItem.active ? "text-emerald-700 font-bold" : "text-gray-400"}`}>
+                          {stepItem.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* ── FORM STATE ── */}
+              {/* ── FORM STEPS ── */}
               {!remediationStep && (
                 <>
-                  {/* GitHub connection */}
-                  {githubConnected === false && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                      <h4 className="text-sm font-bold text-amber-800 mb-1">GitHub Not Connected</h4>
-                      <p className="text-xs text-amber-700 mb-3">Connect your GitHub account to create pull requests.</p>
-                      <button
-                        onClick={() => signIn("github", { callbackUrl: window.location.href })}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-lg text-sm transition"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
-                        </svg>
-                        Connect GitHub
-                      </button>
+                  {/* Step 1: Connect GitHub */}
+                  {wizardStep === 1 && (
+                    <div className="space-y-4">
+                      {githubConnected === false ? (
+                        <div className="text-center py-4 space-y-4">
+                          <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3 border border-amber-100">
+                            <span className="text-amber-600 text-xl">🔑</span>
+                          </div>
+                          <h4 className="text-sm font-bold text-gray-900 mb-1">GitHub Connection Required</h4>
+                          <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                            Connect your GitHub account to create remediation branches and generate pull requests.
+                          </p>
+                          <button
+                            onClick={() => signIn("github", { callbackUrl: window.location.href })}
+                            className="w-full py-3 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                              <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+                            </svg>
+                            Connect GitHub Account
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 space-y-4">
+                          <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3 border border-emerald-100">
+                            <span className="text-emerald-600 text-lg">✓</span>
+                          </div>
+                          <h4 className="text-sm font-bold text-gray-900 mb-1">GitHub Account Connected</h4>
+                          <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                            Your GitHub connection is active. You can now select a repository to proceed.
+                          </p>
+                          <button
+                            onClick={() => setWizardStep(2)}
+                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-sm"
+                          >
+                            Continue to Choose Repository
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Repo selector */}
-                  {githubConnected && (
-                    <>
+                  {/* Step 2: Choose Repository */}
+                  {wizardStep === 2 && (
+                    <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Repository</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Target Repository</label>
                         {loadingRepos ? (
-                          <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                            <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full" />
-                            Loading repositories...
+                          <div className="flex flex-col items-center justify-center py-8 gap-3 text-sm text-gray-400">
+                            <div className="animate-spin h-6 w-6 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                            <span>Loading repositories...</span>
                           </div>
                         ) : (
                           <>
@@ -1478,147 +1747,220 @@ export default function AuditPage() {
                               placeholder="Search repositories..."
                               value={repoSearch}
                               onChange={(e) => setRepoSearch(e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-2"
+                              className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3 bg-gray-50/50"
                             />
-                            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                            <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 bg-white">
                               {repos
                                 .filter(r => r.fullName.toLowerCase().includes(repoSearch.toLowerCase()))
                                 .map((repo) => (
                                   <button
                                     key={repo.id}
-                                    onClick={() => { setSelectedRepo(repo.fullName); loadBranches(repo.fullName); }}
-                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0 flex items-center justify-between ${
-                                      selectedRepo === repo.fullName ? "bg-emerald-50 text-emerald-800" : "text-gray-700"
+                                    onClick={() => {
+                                      setSelectedRepo(repo.fullName);
+                                      loadBranches(repo.fullName);
+                                      setWizardStep(3);
+                                    }}
+                                    className={`w-full text-left px-4 py-3 text-xs hover:bg-gray-50 transition-all flex items-center justify-between cursor-pointer ${
+                                      selectedRepo === repo.fullName ? "bg-emerald-50/50 text-emerald-900 font-semibold" : "text-gray-700"
                                     }`}
                                   >
-                                    <span className="font-medium truncate">{repo.fullName}</span>
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                      repo.private ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+                                    <span className="truncate pr-4 font-mono">{repo.fullName}</span>
+                                    <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full flex-shrink-0 tracking-wider ${
+                                      repo.private ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
                                     }`}>
                                       {repo.private ? "PRIVATE" : "PUBLIC"}
                                     </span>
                                   </button>
                                 ))}
                               {repos.filter(r => r.fullName.toLowerCase().includes(repoSearch.toLowerCase())).length === 0 && (
-                                <p className="text-sm text-gray-400 text-center py-4">No repositories found</p>
+                                <p className="text-xs text-gray-400 text-center py-6">No repositories found</p>
                               )}
                             </div>
                           </>
                         )}
                       </div>
-
-                      {/* Branch selector */}
                       {selectedRepo && (
+                        <div className="flex gap-2 justify-end border-t border-gray-100 pt-4">
+                          <button
+                            onClick={() => setWizardStep(3)}
+                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-sm"
+                          >
+                            Next: Choose Branch
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Step 3: Choose Branch */}
+                  {wizardStep === 3 && (
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 border border-gray-150 rounded-xl p-3.5 flex items-center justify-between">
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Base Branch</label>
-                          {loadingBranches ? (
-                            <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                              <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full" />
-                              Loading branches...
-                            </div>
-                          ) : (
-                            <select
-                              value={selectedBranch}
-                              onChange={(e) => setSelectedBranch(e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                            >
-                              <option value="">Select a branch</option>
-                              {branches.map((branch) => (
-                                <option key={branch.name} value={branch.name}>
-                                  {branch.name} {branch.protected ? "(protected)" : ""}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Selected Repo</span>
+                          <span className="text-xs font-mono font-semibold text-gray-700">{selectedRepo}</span>
                         </div>
-                      )}
+                        <button 
+                          onClick={() => setWizardStep(2)} 
+                          className="text-xs text-blue-600 hover:underline font-bold cursor-pointer"
+                        >
+                          Change
+                        </button>
+                      </div>
 
-                      {/* Upgraded Remediation Plan Preview */}
-                      {selectedRepo && selectedBranch && (
-                        <div className="bg-gray-50 border border-gray-250 rounded-xl p-3.5 space-y-3">
-                          <div className="flex items-center justify-between border-b pb-2">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Remediation Plan Preview</span>
-                            {loadingPlan ? (
-                              <span className="text-[10px] font-semibold text-gray-400 flex items-center gap-1">
-                                <div className="animate-spin h-2.5 w-2.5 border border-gray-300 border-t-gray-600 rounded-full" />
-                                Planning...
-                              </span>
-                            ) : remediationPlan ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase">
-                                Framework: {remediationPlan.framework.replace("-", " ")}
-                              </span>
-                            ) : null}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Base Branch</label>
+                        {loadingBranches ? (
+                          <div className="flex flex-col items-center justify-center py-6 gap-3 text-sm text-gray-400">
+                            <div className="animate-spin h-5 w-5 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                            <span>Loading branch list...</span>
                           </div>
+                        ) : (
+                          <select
+                            value={selectedBranch}
+                            onChange={(e) => setSelectedBranch(e.target.value)}
+                            className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                          >
+                            <option value="">Select a branch</option>
+                            {branches.map((branch) => (
+                              <option key={branch.name} value={branch.name}>
+                                {branch.name} {branch.protected ? "(protected)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
 
-                          {loadingPlan && (
-                            <p className="text-xs text-gray-400 py-2 italic text-center">Analyzing project files to plan code patches...</p>
-                          )}
+                      <div className="flex gap-2 justify-between border-t border-gray-100 pt-4">
+                        <button
+                          onClick={() => setWizardStep(2)}
+                          className="px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={() => setWizardStep(4)}
+                          disabled={!selectedBranch}
+                          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-sm"
+                        >
+                          Next: Review Plan
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                          {!loadingPlan && remediationPlan && (
-                            <div className="space-y-2">
-                              {/* Direct patches list */}
-                              {remediationPlan.patches.some(p => p.action === "direct_patch_ready") ? (
-                                <div>
-                                  <h5 className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">Code Patches (Will Modify Files)</h5>
-                                  <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
-                                    {remediationPlan.patches
-                                      .filter(p => p.action === "direct_patch_ready")
-                                      .map(p => {
-                                        const issue = audit?.issues.find(i => i.id === p.issueId);
-                                        return (
-                                          <div key={p.issueId} className="text-xs text-gray-700 bg-emerald-50/50 border border-emerald-100 rounded p-1.5 flex flex-col gap-0.5">
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-semibold">{issue ? getIssueTitle(issue) : p.ruleId}</span>
-                                              <span className="text-[9px] font-bold text-emerald-700 uppercase bg-emerald-50 px-1 rounded">DIRECT FIX</span>
-                                            </div>
-                                            <span className="text-[10px] text-gray-500 font-mono truncate">Target: {p.targetFile}</span>
-                                          </div>
-                                        );
-                                      })}
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {/* Report only list */}
-                              {remediationPlan.patches.some(p => p.action === "report_only") ? (
-                                <div>
-                                  <h5 className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-1">Report-Only (Requires Manual Review)</h5>
-                                  <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
-                                    {remediationPlan.patches
-                                      .filter(p => p.action === "report_only")
-                                      .map(p => {
-                                        const issue = audit?.issues.find(i => i.id === p.issueId);
-                                        return (
-                                          <div key={p.issueId} className="text-xs text-gray-700 bg-amber-50/50 border border-amber-100 rounded p-1.5 flex flex-col gap-0.5">
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-semibold truncate max-w-[280px]">{issue ? getIssueTitle(issue) : p.ruleId}</span>
-                                              <span className="text-[9px] font-bold text-amber-700 uppercase bg-amber-50 px-1 rounded">MANUAL</span>
-                                            </div>
-                                            <span className="text-[10px] text-gray-500">{p.reason}</span>
-                                          </div>
-                                        );
-                                      })}
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              <div className="text-[10px] text-gray-400 bg-white border border-gray-200 rounded p-2 italic leading-relaxed">
-                                💡 <strong>Safety note:</strong> UX-Auditor only applies safe, high-confidence patches. Some issues may require manual review.
-                              </div>
-                            </div>
-                          )}
+                  {/* Step 4: Review Remediation Plan */}
+                  {wizardStep === 4 && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div className="bg-gray-50 border border-gray-150 rounded-xl p-3">
+                          <span className="text-[9px] text-gray-400 font-bold uppercase block">Repository</span>
+                          <span className="text-xs font-mono font-semibold text-gray-700 truncate block">{selectedRepo}</span>
                         </div>
-                      )}
+                        <div className="bg-gray-50 border border-gray-150 rounded-xl p-3">
+                          <span className="text-[9px] text-gray-400 font-bold uppercase block">Base Branch</span>
+                          <span className="text-xs font-semibold text-gray-700 truncate block">{selectedBranch}</span>
+                        </div>
+                      </div>
 
-                      {/* Generate PR button */}
-                      <button
-                        onClick={generatePR}
-                        disabled={!selectedRepo || !selectedBranch || selectedIssueIds.size === 0}
-                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-sm transition text-sm"
-                      >
-                        Generate Pull Request
-                      </button>
-                    </>
+                      {/* Plan Preview Box */}
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3.5">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Remediation Plan Preview</span>
+                          {loadingPlan ? (
+                            <span className="text-[10px] font-semibold text-gray-400 flex items-center gap-1.5">
+                              <div className="animate-spin h-3 w-3 border border-gray-300 border-t-gray-600 rounded-full" />
+                              Planning...
+                            </span>
+                          ) : remediationPlan ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase">
+                              Framework: {remediationPlan.framework.replace("-", " ")}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {loadingPlan && (
+                          <p className="text-xs text-gray-400 py-4 italic text-center">Analyzing project files to plan code patches...</p>
+                        )}
+
+                        {!loadingPlan && remediationPlan && (
+                          <div className="space-y-3">
+                            {/* Direct patches list */}
+                            {remediationPlan.patches.some(p => p.action === "direct_patch_ready") ? (
+                              <div>
+                                <h5 className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                  <span>🛠️</span> Code Patches (Will Modify Files)
+                                </h5>
+                                <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
+                                  {remediationPlan.patches
+                                    .filter(p => p.action === "direct_patch_ready")
+                                    .map(p => {
+                                      const issue = audit?.issues.find(i => i.id === p.issueId);
+                                      return (
+                                        <div key={p.issueId} className="text-xs text-gray-700 bg-emerald-50/50 border border-emerald-100 rounded-lg p-2.5 flex flex-col gap-0.5">
+                                          <div className="flex items-center justify-between">
+                                            <span className="font-semibold">{issue ? getIssueTitle(issue) : p.ruleId}</span>
+                                            <span className="text-[9px] font-bold text-emerald-700 bg-white px-1.5 py-0.5 border border-emerald-200 rounded uppercase">DIRECT FIX</span>
+                                          </div>
+                                          <span className="text-[10px] text-gray-500 font-mono truncate mt-0.5">Target: {p.targetFile}</span>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {/* Report only list */}
+                            {remediationPlan.patches.some(p => p.action === "report_only") ? (
+                              <div>
+                                <h5 className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                  <span>📝</span> Report-Only (Manual Review Guidelines)
+                                </h5>
+                                <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
+                                  {remediationPlan.patches
+                                    .filter(p => p.action === "report_only")
+                                    .map(p => {
+                                      const issue = audit?.issues.find(i => i.id === p.issueId);
+                                      return (
+                                        <div key={p.issueId} className="text-xs text-gray-700 bg-amber-50/50 border border-amber-100 rounded-lg p-2.5 flex flex-col gap-0.5">
+                                          <div className="flex items-center justify-between">
+                                            <span className="font-semibold truncate max-w-[280px]">{issue ? getIssueTitle(issue) : p.ruleId}</span>
+                                            <span className="text-[9px] font-bold text-amber-700 bg-white px-1.5 py-0.5 border border-amber-200 rounded uppercase">MANUAL</span>
+                                          </div>
+                                          <span className="text-[10px] text-gray-500 mt-0.5">{p.reason}</span>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-2.5 italic leading-relaxed">
+                              💡 <strong>Safety note:</strong> UX-Auditor only applies safe, high-confidence patches. Unsupported issues are not ignored; they are included as manual recommendations.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 justify-between border-t border-gray-100 pt-4">
+                        <button
+                          onClick={() => setWizardStep(3)}
+                          className="px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={() => {
+                            setWizardStep(5);
+                            generatePR();
+                          }}
+                          disabled={loadingPlan || !remediationPlan}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-sm"
+                        >
+                          Generate Pull Request
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </>
               )}
