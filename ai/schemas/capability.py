@@ -8,6 +8,7 @@ class AgentCapability(str, Enum):
     for capability-based agent selection. This is the single source of truth
     — agents never define their own routing policy.
     """
+    # Sprint 3 capabilities (legacy / planned)
     BROWSER_CONTROL = "BROWSER_CONTROL"
     DOM_PARSING = "DOM_PARSING"
     BROWSER_SANDBOX = "BROWSER_SANDBOX"
@@ -18,3 +19,8 @@ class AgentCapability(str, Enum):
     REPORT_WRITING = "REPORT_WRITING"
     DB_STORAGE = "DB_STORAGE"
     VERIFICATION = "VERIFICATION"
+
+    # Sprint 4 capabilities
+    CAPTURE_BROWSER = "capture_browser"
+    ANALYZE_ACCESSIBILITY = "analyze_accessibility"
+    ANALYZE_HEURISTICS = "analyze_heuristics"

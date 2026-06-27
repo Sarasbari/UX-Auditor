@@ -6,6 +6,8 @@ from .task import Task, TaskType, TaskStatus
 from .execution_plan import ExecutionPlan
 from .execution_result import ExecutionResult
 from .capability import AgentCapability
+from .browser_capture import BrowserCapture, ViewportInfo, ComputedStyle
+from .finding import Finding, FindingCategory, FindingSeverity, FindingSource
 
 __all__ = [
     "Evidence",
@@ -18,4 +20,11 @@ __all__ = [
     "ExecutionPlan",
     "ExecutionResult",
     "AgentCapability",
+    "BrowserCapture",
+    "ViewportInfo",
+    "ComputedStyle",
+    "Finding",
+    "FindingCategory",
+    "FindingSeverity",
+    "FindingSource",
 ]
