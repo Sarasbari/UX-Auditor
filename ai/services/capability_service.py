@@ -11,6 +11,8 @@ from ai.schemas.capability import AgentCapability
 
 from ai.agents.browser_agent import BrowserAgent
 from ai.agents.analysis_agent import AnalysisAgent
+from ai.agents.patch_agent import PatchAgent
+from ai.agents.verification_agent import VerificationAgent
 
 
 class CapabilityService:
@@ -31,5 +33,9 @@ class CapabilityService:
         registry.register(AgentCapability.CAPTURE_BROWSER, lambda: BrowserAgent())
         registry.register(AgentCapability.ANALYZE_ACCESSIBILITY, lambda: AnalysisAgent())
         registry.register(AgentCapability.ANALYZE_HEURISTICS, lambda: AnalysisAgent())
+        
+        # Sprint 5 capabilities mapped to agent factories
+        registry.register(AgentCapability.GENERATE_PATCH, lambda: PatchAgent())
+        registry.register(AgentCapability.VERIFY_PATCH, lambda: VerificationAgent())
         
         return registry

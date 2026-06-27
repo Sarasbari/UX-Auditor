@@ -29,6 +29,11 @@ class MissionSchema(BaseModel):
     # Patch tracking
     generated_patches: List[Dict[str, Any]] = Field(default_factory=list)
     verified_patches: List[Dict[str, Any]] = Field(default_factory=list)
+    verification_results: List[Dict[str, Any]] = Field(default_factory=list)
+    patch_history: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Lightweight audit trail of patch verifications."
+    )
     
     # Diagnostics
     mission_metrics: Dict[str, Any] = Field(default_factory=dict)
