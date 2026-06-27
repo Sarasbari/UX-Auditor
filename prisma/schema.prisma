@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  TEAM
+  ENTERPRISE
+}
+
+enum AuditStatus {
+  QUEUED
+  PROCESSING
+  CAPTURING
+  ANALYZING
+  MERGING
+  VERIFYING_FIXES
+  COMPLETED
+  FAILED
+}
+
+enum Severity {
+  CRITICAL
+  SERIOUS
+  MODERATE
+  MINOR
+}
+
+enum IssueCategory {
+  ACCESSIBILITY
+  UX_HEURISTIC
+  DESIGN_QUALITY
+  CUSTOM_RULE
+}
+
+enum FixStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  NOT_APPLICABLE
+}
+
+enum IssueSource {
+  DETERMINISTIC
+  LLM
+  MERGED
+}
+
+enum ScreenshotType {
+  ORIGINAL
+  PATCHED
+  HIGHLIGHTED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model User {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  name           String?
+  passwordHash   String?
+  subscriptionTier SubscriptionTier @default(FREE)
+  stripeCustomerId String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  projects       Project[]
+  auditRuns      AuditRun[]      @relation("UserAuditRuns")
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auditRuns AuditRun[]
+}
+
+model AuditRun {
+  id          String      @id @default(uuid())
+  projectId   String
+  userId      String
+  status      AuditStatus @default(QUEUED)
+  url         String
+  score       Int?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User        @relation("UserAuditRuns", fields: [userId], references: [id], onDelete: Cascade)
+  issues      Issue[]
+  screenshots Screenshot[]
+  domSnapshot DOMSnapshot?
+  chatMessages ChatMessage[]
+}
+
+model Issue {
+  id                String       @id @default(uuid())
+  auditRunId        String
+  severity          Severity
+  category          IssueCategory
+  elementSelector   String?
+  description       String
+  fixSuggestion     String?
+  fixDiff           Json?
+  verifiedFixStatus FixStatus    @default(NOT_APPLICABLE)
+  source            IssueSource
+  createdAt         DateTime     @default(now())
+
+  auditRun          AuditRun     @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  screenshots       Screenshot[]
+}
+
+model Screenshot {
+  id        String         @id @default(uuid())
+  issueId   String?
+  auditRunId String
+  type      ScreenshotType
+  url       String
+  createdAt DateTime       @default(now())
+
+  issue     Issue?         @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  auditRun  AuditRun       @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+}
+
+model DOMSnapshot {
+  id         String   @id @default(uuid())
+  auditRunId String   @unique
+  url        String
+  createdAt  DateTime @default(now())
+
+  auditRun   AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  auditRunId    String
+  role          MessageRole
+  content       String
+  citedIssueIds String[]
+  createdAt     DateTime    @default(now())
+
+  auditRun      AuditRun    @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+}
