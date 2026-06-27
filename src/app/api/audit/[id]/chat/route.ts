@@ -52,10 +52,19 @@ export async function POST(
       createdAt: msg.createdAt.toISOString(),
     }));
 
-    const apiRes = await fetch("http://localhost:8000/chat", {
+    const FASTAPI_URL = process.env.FASTAPI_URL || "http://localhost:8000";
+    const apiRes = await fetch(`${FASTAPI_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audit_id: id, message: message })
+      body: JSON.stringify({
+        message,
+        chat_history: chatHistory.map(h => ({ role: h.role, content: h.content })),
+        report_data: {
+          url: auditRun.url,
+          score: auditRun.score,
+          issues: issues
+        }
+      })
     });
 
     if (!apiRes.ok) {

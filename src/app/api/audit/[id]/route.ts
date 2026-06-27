@@ -31,6 +31,7 @@ export async function GET(
     const response = {
       ...auditRun,
       status: auditRun.status.toLowerCase(),
+      errorMessage: auditRun.errorMessage,
       issues: auditRun.issues.map(issue => ({
         ...issue,
         severity: issue.severity.toLowerCase(),

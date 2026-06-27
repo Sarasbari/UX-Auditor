@@ -36,8 +36,9 @@ class AuditRequest(BaseModel):
     audit_id: Optional[str] = None
 
 class ChatRequest(BaseModel):
-    audit_id: str
     message: str
+    chat_history: List[Dict[str, Any]]
+    report_data: Dict[str, Any]
 
 async def execute_audit_job(audit_id: str, url: str, journey_steps: str):
     """
@@ -118,27 +119,13 @@ async def get_report(audit_id: str):
 
 @app.post("/chat")
 async def chat_followup(req: ChatRequest):
-    audit = db.get_audit(req.audit_id)
-    if not audit:
-        raise HTTPException(status_code=404, detail="Audit not found")
-        
-    if audit["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Cannot chat about an incomplete audit")
-        
-    chat_history = db.get_chat_history(req.audit_id)
-    report_data = audit.get("report") or {}
-    
-    # Call LLM chat layer
-    chat_res = await chat_with_audit_report(chat_history, report_data, req.message)
-    
-    # Save messages in SQLite
-    db.save_chat_message(req.audit_id, "user", req.message)
-    db.save_chat_message(req.audit_id, "assistant", chat_res["response"], chat_res["citedIssueIds"])
-    
+    # Call LLM chat layer directly with request context
+    chat_res = await chat_with_audit_report(req.chat_history, req.report_data, req.message)
     return {
         "response": chat_res["response"],
         "citedIssueIds": chat_res["citedIssueIds"]
     }
+
 
 @app.get("/progress/{audit_id}")
 async def get_progress(audit_id: str):
