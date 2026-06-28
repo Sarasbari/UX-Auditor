@@ -70,6 +70,11 @@ sequenceDiagram
 ### 4. Judge Mode Executive Summary
 - Premium light-themed dashboard displaying a UX health verdict, risk profiles, business impacts, and polished narrative summaries ready for stakeholder presentations.
 
+### 5. 🔊 Voice Summary (Accessibility)
+- **Listen to Audit Summary**: One-click AI-narrated audio playback of audit findings, powered by [Smallest.ai](https://smallest.ai) TTS.
+- Converts score, top risks, and highest-impact fixes into a concise spoken summary — ideal for visually impaired users or hands-free review.
+- Fully server-side: API keys are never exposed to the client.
+
 ---
 
 ## 📂 Directory Structure
@@ -124,6 +129,11 @@ NEXTAUTH_URL="http://localhost:3000"
 # Optional: GitHub OAuth integration
 GITHUB_ID=""
 GITHUB_SECRET=""
+
+# Optional: Smallest.ai Voice Summary (enables "Listen" button)
+SMALLEST_AI_API_KEY=""
+SMALLEST_AI_VOICE_ID="meher"
+SMALLEST_AI_MODEL="lightning_v3.1"
 ```
 
 ### 3. Database Initialization

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator, ScoreDeltaBadge } from "@/components/ui/badges";
@@ -365,6 +365,70 @@ export default function AuditPage() {
   const [showSimulator, setShowSimulator] = useState(false);
   const [simulatorSelectedIds, setSimulatorSelectedIds] = useState<Set<string>>(new Set());
   const [copiedFixPlan, setCopiedFixPlan] = useState(false);
+
+  // ── Voice summary state ─────────────────────────────────────────────────────
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [voicePlaying, setVoicePlaying] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleListenToSummary = useCallback(async () => {
+    if (!audit) return;
+
+    // If already playing, stop it
+    if (voicePlaying && voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current.currentTime = 0;
+      setVoicePlaying(false);
+      return;
+    }
+
+    setVoiceLoading(true);
+    setVoiceError(null);
+
+    try {
+      const res = await fetch(`/api/audit/${audit.id}/voice-summary`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to generate voice summary");
+      }
+
+      const blob = await res.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      voiceAudioRef.current = audio;
+
+      audio.onended = () => {
+        setVoicePlaying(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      audio.onerror = () => {
+        setVoicePlaying(false);
+        setVoiceError("Audio playback failed");
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      await audio.play();
+      setVoicePlaying(true);
+    } catch (err: any) {
+      setVoiceError(err.message || "Voice summary unavailable");
+    } finally {
+      setVoiceLoading(false);
+    }
+  }, [audit, voicePlaying]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.pause();
+        voiceAudioRef.current = null;
+      }
+    };
+  }, []);
 
   // ── Remediation state ──────────────────────────────────────────────────────
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
@@ -1017,7 +1081,7 @@ ${fixesPlanText || "No issues selected."}`;
             <div className="md:col-span-3 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h2 className="text-lg font-bold text-gray-900">Executive Summary</h2>
                     <button
                       type="button"
@@ -1029,6 +1093,44 @@ ${fixesPlanText || "No issues selected."}`;
                       }`}
                     >
                       ⚖️ Judge Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleListenToSummary}
+                      disabled={voiceLoading}
+                      title={voiceError || "Listen to an AI-narrated summary of this audit"}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition border cursor-pointer select-none active:scale-95 duration-100 ${
+                        voicePlaying
+                          ? "bg-red-500 hover:bg-red-600 text-white border-red-600 shadow-sm"
+                          : voiceError
+                            ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
+                            : "bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200"
+                      } ${voiceLoading ? "opacity-60 cursor-wait" : ""}`}
+                    >
+                      {voiceLoading ? (
+                        <>
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Generating…
+                        </>
+                      ) : voicePlaying ? (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="4" width="4" height="16" rx="1" />
+                            <rect x="14" y="4" width="4" height="16" rx="1" />
+                          </svg>
+                          Stop
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707A1 1 0 0112 5.586v12.828a1 1 0 01-1.707.707L5.586 15z" />
+                          </svg>
+                          {voiceError ? "Retry" : "Listen"}
+                        </>
+                      )}
                     </button>
                   </div>
                   <p className="text-sm text-gray-600 mt-1 leading-relaxed">
