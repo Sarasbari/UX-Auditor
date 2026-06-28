@@ -7,9 +7,19 @@ import { useSession, signOut } from "next-auth/react";
 export default function Home() {
   const { data: session } = useSession();
   const [url, setUrl] = useState("");
-  const [auditMode, setAuditMode] = useState<"url" | "screenshot">("url");
+  const [auditMode, setAuditMode] = useState<"url" | "screenshot" | "compare">("url");
+  const [compareType, setCompareType] = useState<"url" | "screenshot">("url");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+
+  // Compare inputs
+  const [url1, setUrl1] = useState("");
+  const [url2, setUrl2] = useState("");
+  const [primaryFile, setPrimaryFile] = useState<File | null>(null);
+  const [primaryPreview, setPrimaryPreview] = useState<string | null>(null);
+  const [competitorFile, setCompetitorFile] = useState<File | null>(null);
+  const [competitorPreview, setCompetitorPreview] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
@@ -40,6 +50,39 @@ export default function Home() {
     const reader = new FileReader();
     reader.onloadend = () => {
       setFilePreview(reader.result as string);
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const handleCompareFileChange = (selectedFile: File | null, type: "primary" | "competitor") => {
+    const setF = type === "primary" ? setPrimaryFile : setCompetitorFile;
+    const setP = type === "primary" ? setPrimaryPreview : setCompetitorPreview;
+
+    if (!selectedFile) {
+      setF(null);
+      setP(null);
+      return;
+    }
+
+    if (selectedFile.size > 8 * 1024 * 1024) {
+      setError("Image must be smaller than 8MB");
+      setF(null);
+      setP(null);
+      return;
+    }
+
+    if (!selectedFile.type.startsWith("image/")) {
+      setError("Only images are allowed");
+      setF(null);
+      setP(null);
+      return;
+    }
+
+    setError("");
+    setF(selectedFile);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setP(reader.result as string);
     };
     reader.readAsDataURL(selectedFile);
   };
@@ -79,7 +122,7 @@ export default function Home() {
 
         const data = await response.json();
         router.push(`/audit/${data.id}`);
-      } else {
+      } else if (auditMode === "screenshot") {
         if (!file) {
           setError("Please select or drop a screenshot image");
           setIsLoading(false);
@@ -101,6 +144,54 @@ export default function Home() {
 
         const data = await response.json();
         router.push(`/audit/${data.id}`);
+      } else {
+        // Compare Mode
+        if (compareType === "url") {
+          if (!url1 || !url2) {
+            setError("Both URLs are required for comparison");
+            setIsLoading(false);
+            return;
+          }
+          let norm1 = url1.startsWith("http://") || url1.startsWith("https://") ? url1 : `https://${url1}`;
+          let norm2 = url2.startsWith("http://") || url2.startsWith("https://") ? url2 : `https://${url2}`;
+
+          const response = await fetch("/api/compare", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url1: norm1, url2: norm2 }),
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to submit comparison");
+          }
+
+          const data = await response.json();
+          router.push(`/compare/${data.id}`);
+        } else {
+          if (!primaryFile || !competitorFile) {
+            setError("Both screenshots are required for comparison");
+            setIsLoading(false);
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append("primaryFile", primaryFile);
+          formData.append("competitorFile", competitorFile);
+
+          const response = await fetch("/api/compare", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to submit comparison");
+          }
+
+          const data = await response.json();
+          router.push(`/compare/${data.id}`);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -149,7 +240,7 @@ export default function Home() {
             Audit a URL or screenshot, <span className="text-blue-600">get verified fixes</span>
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Run live URL audits with DOM evidence and verified fixes, or upload a screenshot for fast visual UX feedback.
+            Run live URL audits with DOM evidence, upload a screenshot for visual UX feedback, or compare side-by-side with a competitor.
           </p>
         </div>
 
@@ -162,7 +253,7 @@ export default function Home() {
                 setAuditMode("url");
                 setError("");
               }}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
                 auditMode === "url"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-900"
@@ -176,7 +267,7 @@ export default function Home() {
                 setAuditMode("screenshot");
                 setError("");
               }}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
                 auditMode === "screenshot"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-900"
@@ -184,11 +275,25 @@ export default function Home() {
             >
               Screenshot Audit
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuditMode("compare");
+                setError("");
+              }}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
+                auditMode === "compare"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Compare Mode
+            </button>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="max-w-2xl mx-auto mb-16">
-          {auditMode === "url" ? (
+          {auditMode === "url" && (
             <div className="flex gap-3">
               <input
                 type="text"
@@ -218,7 +323,9 @@ export default function Home() {
                 )}
               </button>
             </div>
-          ) : (
+          )}
+
+          {auditMode === "screenshot" && (
             <div className="space-y-4">
               <div
                 onDragOver={(e) => e.preventDefault()}
@@ -293,6 +400,210 @@ export default function Home() {
                   "Run Screenshot Audit"
                 ) : (
                   "Sign in to run screenshot audit"
+                )}
+              </button>
+            </div>
+          )}
+
+          {auditMode === "compare" && (
+            <div className="space-y-6 bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm">
+              <div className="flex justify-center">
+                <div className="bg-gray-100 p-0.5 rounded-lg flex gap-1 border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompareType("url");
+                      setError("");
+                    }}
+                    className={`px-4 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
+                      compareType === "url"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Compare URLs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompareType("screenshot");
+                      setError("");
+                    }}
+                    className={`px-4 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
+                      compareType === "screenshot"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Compare Screenshots
+                  </button>
+                </div>
+              </div>
+
+              {compareType === "url" ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                      Your Product URL
+                    </label>
+                    <input
+                      type="text"
+                      value={url1}
+                      onChange={(e) => setUrl1(e.target.value)}
+                      placeholder="e.g. mysite.com"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                      Competitor URL
+                    </label>
+                    <input
+                      type="text"
+                      value={url2}
+                      onChange={(e) => setUrl2(e.target.value)}
+                      placeholder="e.g. competitorsite.com"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Primary Screenshot */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                      Your Screenshot
+                    </label>
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (isLoading) return;
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) handleCompareFileChange(f, "primary");
+                      }}
+                      className={`border-2 border-dashed rounded-2xl p-4 text-center transition flex flex-col items-center justify-center min-h-[160px] ${
+                        primaryPreview ? "border-blue-300 bg-blue-50/10" : "border-gray-300 hover:border-gray-405 bg-white"
+                      }`}
+                    >
+                      {primaryPreview ? (
+                        <div className="relative group max-w-[180px] mx-auto">
+                          <img
+                            src={primaryPreview}
+                            alt="Your Preview"
+                            className="max-h-24 rounded shadow-sm border border-gray-200 object-contain mx-auto"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCompareFileChange(null, "primary")}
+                            className="absolute -top-2 -right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow transition cursor-pointer"
+                            disabled={isLoading}
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                          <p className="text-[10px] text-gray-500 mt-1 truncate">{primaryFile?.name}</p>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs font-semibold text-gray-700">Drag image here</p>
+                          <label className="mt-2 px-3 py-1.5 border border-gray-300 rounded-lg text-[10px] font-semibold text-gray-600 bg-white hover:bg-gray-50 transition shadow-sm cursor-pointer inline-block">
+                            Browse
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleCompareFileChange(f, "primary");
+                              }}
+                              className="hidden"
+                              disabled={isLoading}
+                            />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Competitor Screenshot */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                      Competitor Screenshot
+                    </label>
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (isLoading) return;
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) handleCompareFileChange(f, "competitor");
+                      }}
+                      className={`border-2 border-dashed rounded-2xl p-4 text-center transition flex flex-col items-center justify-center min-h-[160px] ${
+                        competitorPreview ? "border-blue-300 bg-blue-50/10" : "border-gray-300 hover:border-gray-405 bg-white"
+                      }`}
+                    >
+                      {competitorPreview ? (
+                        <div className="relative group max-w-[180px] mx-auto">
+                          <img
+                            src={competitorPreview}
+                            alt="Competitor Preview"
+                            className="max-h-24 rounded shadow-sm border border-gray-200 object-contain mx-auto"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCompareFileChange(null, "competitor")}
+                            className="absolute -top-2 -right-2 bg-red-650 hover:bg-red-750 text-white rounded-full p-1 shadow transition cursor-pointer"
+                            disabled={isLoading}
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                          <p className="text-[10px] text-gray-500 mt-1 truncate">{competitorFile?.name}</p>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs font-semibold text-gray-700">Drag image here</p>
+                          <label className="mt-2 px-3 py-1.5 border border-gray-300 rounded-lg text-[10px] font-semibold text-gray-600 bg-white hover:bg-gray-50 transition shadow-sm cursor-pointer inline-block">
+                            Browse
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleCompareFileChange(f, "competitor");
+                              }}
+                              className="hidden"
+                              disabled={isLoading}
+                            />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoading || (!!session && compareType === "url" ? (!url1 || !url2) : (!primaryFile || !competitorFile))}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Running UX Comparison...
+                  </span>
+                ) : session ? (
+                  "Run UX Comparison"
+                ) : (
+                  "Sign in to run UX comparison"
                 )}
               </button>
             </div>

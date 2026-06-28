@@ -33,6 +33,7 @@ model User {
   projects      Project[]
   auditRuns     AuditRun[]          @relation("UserAuditRuns")
   remediations  GitHubRemediation[]
+  comparisonRuns ComparisonRun[]    @relation("UserComparisonRuns")
 }
 
 model Project {
@@ -147,4 +148,19 @@ model GitHubRemediation {
 
   auditRun AuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ComparisonRun {
+  id                String   @id @default(uuid())
+  userId            String
+  primaryAuditId    String
+  competitorAuditId String
+  status            String   @default("COMPLETED")
+  summary           String?
+  categoryScores    String?  // JSON
+  opportunities     String?  // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation("UserComparisonRuns", fields: [userId], references: [id], onDelete: Cascade)
 }
