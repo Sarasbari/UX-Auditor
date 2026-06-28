@@ -36,7 +36,7 @@ async function markFailed(auditRunId: string, errorMessage: string) {
  *   QUEUED → PROCESSING → COMPLETED
  *   QUEUED → PROCESSING → FAILED
  */
-export async function executeAuditJob(auditRunId: string, url: string) {
+export async function executeAuditJob(auditRunId: string, url: string, journeySteps?: string) {
   try {
     // ── QUEUED → PROCESSING ──────────────────────────────────────
     await prisma.auditRun.update({
@@ -50,7 +50,11 @@ export async function executeAuditJob(auditRunId: string, url: string) {
       apiRes = await fetch(`${FASTAPI_URL}/audit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, audit_id: auditRunId }),
+        body: JSON.stringify({
+          url,
+          audit_id: auditRunId,
+          journey_steps: journeySteps || "",
+        }),
       });
     } catch (fetchErr) {
       await markFailed(

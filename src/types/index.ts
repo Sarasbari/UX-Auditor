@@ -76,6 +76,7 @@ export interface ChatMessage {
 export interface AuditRequest {
   url: string;
   projectId?: string;
+  journeySteps?: string;
 }
 
 export interface AuditJobData {

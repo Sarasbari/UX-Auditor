@@ -1,70 +1,139 @@
-# UX-Auditor
+# ⚖️ UX-Auditor
 
-Paste a URL, get verified UX fixes. Dual-engine analysis (deterministic rules + AI) audits live websites, then proves fixes actually work.
+<p align="center">
+  <strong>Dual-engine UX & accessibility auditing with interactive fix simulation and PR-ready remediation plans.</strong>
+</p>
 
-## Architecture
-
-| Layer | Tech | Port |
-|---|---|---|
-| Frontend + API routes | Next.js 15 (App Router) | `localhost:3000` |
-| Audit engine | Python FastAPI + browser-use | `localhost:8001` |
-| Next.js database | Prisma + SQLite | `prisma/dev.db` |
-| Audit engine database | None | N/A (Stateless / In-memory transient state only) |
-
-The Next.js app is the canonical application controller and database owner. It submits audit requests to the FastAPI backend, polls for results, and stores the completed report (issues, score, etc.) in its own Prisma-managed SQLite database. When executing AI chat follow-ups, Next.js sends the full report context and chat history from Prisma to the stateless FastAPI backend, ensuring chat history is stored only once in Prisma.
-
----
-
-## Prerequisites
-
-| Tool | Version | Check |
-|---|---|---|
-| **Node.js** | ≥ 18 | `node --version` |
-| **npm** | ≥ 9 | `npm --version` |
-| **Python** | ≥ 3.10 | `python --version` |
-| **Git** | any | `git --version` |
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js" alt="Next.js 15" />
+  <img src="https://img.shields.io/badge/FastAPI-v0.100-teal?style=for-the-badge&logo=fastapi" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Prisma-ORM-indigo?style=for-the-badge&logo=prisma" alt="Prisma" />
+  <img src="https://img.shields.io/badge/Playwright-Automation-green?style=for-the-badge&logo=playwright" alt="Playwright" />
+  <img src="https://img.shields.io/badge/TypeScript-Ready-blue?style=for-the-badge&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="MIT License" />
+</p>
 
 ---
 
-## Quick Start (Windows)
+## 🚀 Why UX-Auditor?
 
-### 1. Clone and install Node dependencies
+Most auditing tools stop at telling you *what* is broken. UX-Auditor is built to bridge the gap between audit findings and code remediation. By combining **automated WCAG validation** with **conversational AI agents** and **interactive score simulation**, UX-Auditor helps developers identify, simulate, and export code changes directly.
 
+- **Dual-Engine Precision**: Combines deterministic rules (axe-core) with advanced AI vision model heuristics to evaluate both code compliance and page design layout quality.
+- **User Journey Agent**: Runs an autonomous browser agent (`browser-use`) to navigate live pages based on user-defined steps (e.g., *"click pricing, select Sign Up, test the form"*).
+- **Remediation Cockpit**: Interactive simulator to preview code patches, visualize estimated score lifts, and review before/after visual highlights side-by-side.
+- **PR-Ready Exports**: Generates branch suggestions and directly exports remediation PRs to your GitHub repository.
+- **Judge Mode Reports**: Instantly generates a clean, stakeholder-ready executive summary with business impacts and accessibility risk breakdowns.
+
+---
+
+## 🛠️ Architecture & Data Flow
+
+UX-Auditor separates state management (Next.js & Prisma DB) from execution logic (FastAPI & Playwright) to guarantee stateless, fast, and scalable background runs.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer
+    participant FE as Next.js App
+    participant DB as SQLite (Prisma)
+    participant BE as FastAPI Backend
+    participant Agent as Playwright Browser Agent
+
+    User->>FE: Input target URL & Journey steps
+    FE->>DB: Queue AuditRun (status = QUEUED)
+    FE->>BE: Fire-and-forget POST /audit
+    BE->>Agent: Launch browser session & execute steps
+    Agent->>Agent: Capture DOM, screenshots, and run axe-core
+    Agent-->>BE: Aggregate raw audit findings
+    BE->>BE: Run LLM reranking & fix generation
+    BE-->>FE: Poll response (status = COMPLETED)
+    FE->>DB: Save findings & calculate UX score
+    FE-->>User: Render visual cockpit & simulator
+```
+
+---
+
+## ✨ Key Features
+
+### 1. Dual-Engine Audit
+- **Deterministic**: Injects axe-core checks to locate missing form labels, contrast failures, and broken ARIA markers.
+- **AI Usability Heuristics**: Applies custom layout checks and vision analysis to evaluate visual hierarchy, CTA size, and mobile responsiveness.
+
+### 2. User Journey Steps
+- Instructs the AI browser agent to traverse interactive paths, verifying usability hurdles at each step of the user funnel.
+
+### 3. Before/After Fix Simulator
+- Toggle proposed code suggestions.
+- Real-time score recalculation showing estimated improvement lifts before you modify your repo.
+
+### 4. Judge Mode Executive Summary
+- Premium light-themed dashboard displaying a UX health verdict, risk profiles, business impacts, and polished narrative summaries ready for stakeholder presentations.
+
+---
+
+## 📂 Directory Structure
+
+```
+UX-Auditor/
+├── src/
+│   ├── app/                    # Next.js App Router (pages & API endpoints)
+│   │   ├── api/
+│   │   │   ├── audit/          # Submissions, logs, and chat endpoints
+│   │   │   └── auth/           # NextAuth handler configuration
+│   │   ├── audit/[id]/         # Main audit dashboard & Judge Mode
+│   │   ├── dashboard/          # User audit history and projects
+│   │   └── page.tsx            # Main landing page
+│   ├── components/ui/          # Shared layout and badge components
+│   ├── lib/                    # Server-side service layers and DB helpers
+│   └── types/                  # TypeScript interface definitions
+├── server/                     # Python FastAPI Backend
+│   ├── main.py                 # FastAPI endpoints & dashboard uvicorn configuration
+│   ├── auditor.py              # browser-use agent & axe-core runner
+│   ├── heuristics.py           # Custom layout analysis rules
+│   └── llm_layer.py            # AI vision processing & fix generators
+├── prisma/
+│   └── schema.prisma           # Database schema (SQLite)
+└── package.json                # Project script definitions & npm modules
+```
+
+---
+
+## ⚙️ Setup & Installation
+
+### Prerequisites
+- **Node.js** $\ge$ 18
+- **Python** $\ge$ 3.10
+- **Git**
+
+### 1. Clone & Install Frontend
 ```powershell
 git clone https://github.com/Sarasbari/UX-Auditor.git
 cd UX-Auditor
 npm install
 ```
 
-### 2. Set up environment variables
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory:
+```env
+DATABASE_URL="file:./dev.db"
+OPENAI_API_KEY="your-openai-api-key"
+NEXTAUTH_SECRET="generate-a-random-base64-string"
+NEXTAUTH_URL="http://localhost:3000"
 
-```powershell
-copy .env.example .env
+# Optional: GitHub OAuth integration
+GITHUB_ID=""
+GITHUB_SECRET=""
 ```
 
-Edit `.env` and fill in **at minimum**:
-
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | ✅ | Pre-filled as `file:./dev.db` (SQLite) — keep as-is |
-| `OPENAI_API_KEY` | ✅ | Needed by both the FastAPI audit engine and the Next.js chat route |
-| `NEXTAUTH_SECRET` | ✅ | Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
-| `NEXTAUTH_URL` | ✅ | Pre-filled as `http://localhost:3000` — keep as-is |
-| `GITHUB_ID` / `GITHUB_SECRET` | ❌ | Only needed for GitHub OAuth login |
-| `GOOGLE_ID` / `GOOGLE_SECRET` | ❌ | Only needed for Google OAuth login |
-
-> **Note:** Credentials-based sign-in (email + password) works without any OAuth keys configured.
-
-### 3. Initialize the database
-
+### 3. Database Initialization
+Generate the Prisma Client and push the schema to SQLite:
 ```powershell
 npm run db:setup
 ```
 
-This generates the Prisma client and pushes the schema to a local SQLite file at `prisma/dev.db`.
-
-### 4. Set up the Python backend
-
+### 4. Setup Python Backend
+Set up a virtual environment and download dependencies:
 ```powershell
 cd server
 python -m venv .venv
@@ -75,121 +144,19 @@ deactivate
 cd ..
 ```
 
-> **Why `playwright install chromium`?** The audit engine uses `browser-use` which drives a headless Chromium browser to capture and analyze web pages.
+---
 
-### 5. Start both servers
+## 🏃 Run Locally
 
-**Option A — Single command (opens FastAPI in a separate window):**
+Start both the FastAPI backend (port `8001`) and the Next.js dev server (port `3000`) using the orchestrator:
 
 ```powershell
 npm run dev:all
 ```
-
-This starts FastAPI at `localhost:8001` in a new terminal window and Next.js at `localhost:3000` in the current terminal.
-
-**Option B — Two separate terminals:**
-
-```powershell
-# Terminal 1: FastAPI backend
-npm run dev:server
-
-# Terminal 2: Next.js frontend
-npm run dev
-```
-
-### 6. Verify everything is running
-
-| Check | URL | Expected |
-|---|---|---|
-| Next.js frontend | http://localhost:3000 | Landing page with URL input |
-| FastAPI docs (Swagger) | http://localhost:8001/docs | Interactive API documentation |
-| FastAPI dashboard | http://localhost:8001 | Built-in audit dashboard UI |
-| FastAPI health check | http://localhost:8001/openapi.json | JSON OpenAPI schema |
+Open **[http://localhost:3000](http://localhost:3000)** in your browser to start auditing!
 
 ---
 
-## npm Scripts Reference
+## 🛡️ License
 
-| Script | Description |
-|---|---|
-| `npm run dev` | Start Next.js dev server only |
-| `npm run dev:next` | Alias for `npm run dev` |
-| `npm run dev:server` | Start FastAPI backend only (uses `server/.venv`) |
-| `npm run dev:all` | Start both FastAPI + Next.js (Windows) |
-| `npm run build` | Production build (auto-cleans `.next` cache) |
-| `npm run build:ci` | TypeScript check + production build |
-| `npm run typecheck` | Run `tsc --noEmit` |
-| `npm run lint` | Run ESLint |
-| `npm run db:setup` | Generate Prisma client + push schema to SQLite |
-| `npm run db:generate` | Generate Prisma client only |
-| `npm run db:push` | Push schema to database only |
-| `npm run db:migrate` | Create a new Prisma migration |
-| `npm run db:studio` | Open Prisma Studio (database GUI) |
-
----
-
-## Project Structure
-
-```
-UX-Auditor/
-├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── api/
-│   │   │   ├── audit/          # POST /api/audit, GET /api/audit
-│   │   │   │   └── [id]/       # GET /api/audit/:id
-│   │   │   │       └── chat/   # POST /api/audit/:id/chat
-│   │   │   └── auth/
-│   │   │       └── [...nextauth]/  # NextAuth.js handlers
-│   │   ├── audit/[id]/         # Audit report page
-│   │   ├── dashboard/          # User dashboard
-│   │   ├── login/              # Sign-in page
-│   │   ├── layout.tsx          # Root layout
-│   │   └── page.tsx            # Landing page
-│   ├── components/ui/          # Shared UI components
-│   ├── lib/                    # Server utilities
-│   │   ├── db/
-│   │   │   └── prisma.ts       # Prisma client singleton
-│   │   ├── services/
-│   │   │   ├── auth.ts         # NextAuth config
-│   │   │   └── audit-job.ts    # Background job runner
-│   │   └── utils.ts            # UI helpers
-│   ├── experimental/           # Unused/Experimental TypeScript engine
-│   │   ├── audit-orchestrator.ts
-│   │   └── engines/
-│   └── types/                  # TypeScript type definitions
-├── server/                     # Python FastAPI backend
-│   ├── main.py                 # FastAPI app (endpoints + dashboard)
-│   ├── auditor.py              # Browser-use agent + axe-core runner
-│   ├── heuristics.py           # Custom UX heuristic rules
-│   ├── llm_layer.py            # LLM reranking + fix generation
-│   ├── db.py                   # SQLite storage for audits/chat
-│   └── requirements.txt        # Python dependencies
-├── prisma/
-│   └── schema.prisma           # Database schema (SQLite)
-├── .env.example                # Environment template
-└── package.json                # Scripts and Node dependencies
-```
-
----
-
-## Troubleshooting
-
-### `next build` fails with PageNotFoundError
-
-The `.next` cache is stale. Run `npm run build` — the `prebuild` script automatically cleans it.
-
-### FastAPI won't start — "No module named 'server'"
-
-Uvicorn must run from the **project root**, not from inside `server/`. Use `npm run dev:server` which handles this automatically.
-
-### Prisma errors about missing client
-
-Run `npm run db:setup` to regenerate the Prisma client and push the schema.
-
-### `playwright install chromium` fails
-
-Make sure you're running inside the activated venv (`server\.venv\Scripts\activate`) and have network access. On corporate networks, you may need to set `HTTPS_PROXY`.
-
-### OAuth login doesn't work
-
-OAuth is optional. Email/password sign-in works without `GITHUB_ID` or `GOOGLE_ID`. If you want OAuth, create apps at [GitHub Developer Settings](https://github.com/settings/developers) or [Google Cloud Console](https://console.cloud.google.com/) and add the credentials to `.env`.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

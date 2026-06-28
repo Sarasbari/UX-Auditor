@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { url } = body;
+    const { url, journeySteps } = body;
 
     if (!url) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
@@ -33,6 +33,14 @@ export async function POST(request: NextRequest) {
       parsedUrl = new URL(url);
     } catch {
       return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+    }
+
+    let trimmedJourneySteps: string | undefined = undefined;
+    if (journeySteps !== undefined && journeySteps !== null) {
+      if (typeof journeySteps !== "string") {
+        return NextResponse.json({ error: "Journey steps must be a string" }, { status: 400 });
+      }
+      trimmedJourneySteps = journeySteps.trim().substring(0, 2000);
     }
 
     let project = await prisma.project.findFirst({
@@ -59,7 +67,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Fire-and-forget: the service module guarantees a terminal status.
-    executeAuditJob(auditRun.id, parsedUrl.href);
+    executeAuditJob(auditRun.id, parsedUrl.href, trimmedJourneySteps);
 
     return NextResponse.json({
       id: auditRun.id,

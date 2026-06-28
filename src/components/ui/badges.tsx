@@ -22,9 +22,10 @@ export function SeverityBadge({ severity, className }: SeverityBadgeProps) {
 interface FixBadgeProps {
   status: string;
   className?: string;
+  isScreenshot?: boolean;
 }
 
-export function FixBadge({ status, className }: FixBadgeProps) {
+export function FixBadge({ status, className, isScreenshot }: FixBadgeProps) {
   const colors: Record<string, string> = {
     success: "bg-green-100 text-green-800",
     failed: "bg-red-100 text-red-800",
@@ -32,22 +33,21 @@ export function FixBadge({ status, className }: FixBadgeProps) {
     not_applicable: "bg-gray-100 text-gray-600",
   };
 
-  const icons: Record<string, string> = {
-    success: "✓ Verified Fix",
-    failed: "✗ Fix Failed",
-    pending: "⏳ Pending",
-    not_applicable: "— N/A",
-  };
+  const cleanStatus = (status || "not_applicable").toLowerCase();
+
+  const label = isScreenshot
+    ? (cleanStatus === "success" ? "✓ Visual Fix Preview" : "Visual guidance")
+    : (cleanStatus === "success" ? "✓ Verified Fix" : cleanStatus === "failed" ? "✗ Fix Failed" : cleanStatus === "pending" ? "⏳ Pending" : "Suggested fix");
 
   return (
     <span
       className={cn(
         "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-        colors[status] || colors.not_applicable,
+        colors[cleanStatus] || colors.not_applicable,
         className
       )}
     >
-      {icons[status] || icons.not_applicable}
+      {label}
     </span>
   );
 }

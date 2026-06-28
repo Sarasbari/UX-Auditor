@@ -15,6 +15,7 @@ export default function Home() {
   const [auditMode, setAuditMode] = useState<"url" | "screenshot" | "compare">("url");
   const [compareType, setCompareType] = useState<"url" | "screenshot">("url");
   const [url, setUrl] = useState("");
+  const [journeySteps, setJourneySteps] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
 
@@ -135,7 +136,7 @@ export default function Home() {
     setChatInput("");
 
     setTimeout(() => {
-      let reply = "I can analyze that rule for you. Once you run a full audit, I can scan your source code and suggest verified fixes direct to GitHub.";
+      let reply = "I can analyze that rule for you. Once you run a full audit, I can scan your source code and suggest fix plans and PR-ready recommendations direct to GitHub.";
       if (userMsg.toLowerCase().includes("how") || userMsg.toLowerCase().includes("fix")) {
         reply = "To fix this, adjust the color codes or spacing attributes specified in the report. You can test your changes live inside our Before/After Fix Simulator.";
       }
@@ -168,7 +169,7 @@ export default function Home() {
         const response = await fetch("/api/audit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: normalizedUrl }),
+          body: JSON.stringify({ url: normalizedUrl, journeySteps }),
         });
 
         if (!response.ok) {
@@ -269,7 +270,7 @@ export default function Home() {
             <a href="#how">How it works</a>
             <a href="#features">Features</a>
             <a href="#engines">Dual engine</a>
-            <a href="#verified">Verified fixes</a>
+            <a href="#verified">Fix simulator</a>
             <a href="#pricing">Pricing</a>
           </div>
           <div className="navcta">
@@ -309,13 +310,13 @@ export default function Home() {
         <div className="hero-glow two"></div>
         <div className="wrap hero-grid">
           <div>
-            <span className="eyebrow">Dual-engine · 44 design rules + AI heuristics</span>
+            <span className="eyebrow">Dual-engine · WCAG Audit + AI Heuristics</span>
             <h1>
               Don't guess what's broken.<br />
-              <em>Prove what's fixed.</em>
+              <em>Preview fixes instantly.</em>
             </h1>
             <p className="lede">
-              Paste a URL or drop screenshots. Two engines audit your product in parallel — deterministic accessibility rules and AI usability scoring. Verified, re-tested fixes are proven, not just suggested.
+              UX-Auditor combines browser evidence, WCAG checks, custom usability heuristics, and AI-assisted remediation. Paste a URL or drop screenshots to estimate score lifts and preview code fixes in our simulator.
             </p>
 
             <div className="mode-toggle" role="tablist" aria-label="Audit mode">
@@ -360,19 +361,36 @@ export default function Home() {
             <div ref={heroFormRef} className="mt-8">
               <form onSubmit={handleSubmit} className="space-y-4">
                 {auditMode === "url" && (
-                  <div className="audit-bar">
-                    <input
-                      className="audit-input"
-                      type="text"
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                      placeholder="yourwebsite.com"
-                      aria-label="Website URL"
-                      disabled={isLoading}
-                    />
-                    <button type="submit" disabled={isLoading} className="btn btn-primary">
-                      {isLoading ? "Running..." : "Run free audit"}
-                    </button>
+                  <div className="space-y-4">
+                    <div className="audit-bar">
+                      <input
+                        className="audit-input"
+                        type="text"
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        placeholder="yourwebsite.com"
+                        aria-label="Website URL"
+                        disabled={isLoading}
+                      />
+                      <button type="submit" disabled={isLoading} className="btn btn-primary">
+                        {isLoading ? "Running..." : "Run free audit"}
+                      </button>
+                    </div>
+                    <div className="flex flex-col space-y-1.5 animate-fadeIn">
+                      <label htmlFor="journey-steps" className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                        User Journey Steps (Optional)
+                      </label>
+                      <textarea
+                        id="journey-steps"
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white placeholder-slate-400 text-slate-800"
+                        placeholder="Example: Open pricing, click Sign Up, inspect checkout form, then stop."
+                        rows={3}
+                        value={journeySteps}
+                        onChange={(e) => setJourneySteps(e.target.value)}
+                        disabled={isLoading}
+                        maxLength={2000}
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -832,13 +850,13 @@ export default function Home() {
           </div>
           <div className="pipe-step">
             <div className="ring">04</div>
-            <h4>Patch &amp; re-audit</h4>
-            <p>Fixable issues get patched live, then re-tested.</p>
+            <h4>Simulate fixes</h4>
+            <p>Preview suggested repairs in the remediation cockpit.</p>
           </div>
           <div className="pipe-step">
             <div className="ring">05</div>
-            <h4>Verified report</h4>
-            <p>Ranked by severity, every fix shown before / after.</p>
+            <h4>Remediation report</h4>
+            <p>Estimated score lifts, side-by-side simulation, and PR plans.</p>
           </div>
         </div>
 
@@ -848,7 +866,7 @@ export default function Home() {
               <div className="dot"></div>
               <span>yourwebsite.com · audit #2417</span>
             </div>
-            <span className="rc-score">SCORE 8.6/10 · VERIFIED</span>
+            <span className="rc-score">SCORE 8.6/10 · ESTIMATED LIFT</span>
           </div>
           <div className="rc-body">
             <div className="rc-chart">
@@ -884,17 +902,17 @@ export default function Home() {
               <div className="rc-issue-row">
                 <div className="rc-sev high"></div>
                 <span className="name">Hero CTA — contrast 2.1:1</span>
-                <span className="tag">verified</span>
+                <span className="tag">suggested</span>
               </div>
               <div className="rc-issue-row">
                 <div className="rc-sev high"></div>
                 <span className="name">Form input — missing aria-label</span>
-                <span className="tag">verified</span>
+                <span className="tag">suggested</span>
               </div>
               <div className="rc-issue-row">
                 <div className="rc-sev med"></div>
                 <span className="name">Nav — heading hierarchy skip</span>
-                <span className="tag">verified</span>
+                <span className="tag">suggested</span>
               </div>
               <div className="rc-issue-row">
                 <div className="rc-sev med"></div>
@@ -976,15 +994,15 @@ export default function Home() {
         <div className="vf-wrap">
           <div className="vf-side reveal">
             <span className="eyebrow green">The differentiator</span>
-            <h3>We don't suggest a fix. We prove it.</h3>
+            <h3>Simulate and preview fixes before applying.</h3>
             <p className="lede">
-              For mechanically fixable issues — contrast, missing labels, broken ARIA — UX-Auditor patches the live DOM, re-runs the exact same audit, and only marks it "verified" once it actually passes.
+              For accessibility and layout issues — contrast, missing labels, broken ARIA — UX-Auditor provides a remediation cockpit. Preview fix suggestions in the simulator and estimate your post-fix usability score improvement.
             </p>
             <ul className="vf-checklist">
-              <li>Patch applied inside the same browser session</li>
-              <li>Re-audited against the identical rule that failed</li>
-              <li>Side-by-side screenshot — proof, not a promise</li>
-              <li>Pass/fail badge attached to the issue, permanently</li>
+              <li>Interactive simulated scoring based on selected fixes</li>
+              <li>Detailed side-by-side comparison of proposed code repairs</li>
+              <li>AI-generated fix suggestions ready for manual review</li>
+              <li>PR-ready remediation plan exported directly to GitHub</li>
             </ul>
           </div>
           <div className="reveal">
@@ -997,7 +1015,7 @@ export default function Home() {
                 className="vf-layer vf-after"
                 style={{ clipPath: `inset(0 ${100 - v}% 0 0)` }}
               >
-                <span className="vf-label">VERIFIED · CONTRAST 7.4:1 · PASSES AA</span>
+                <span className="vf-label">SIMULATED FIX · CONTRAST 7.4:1 · PASSES AA</span>
                 <button type="button" className="mock-cta">Get started</button>
               </div>
               <div className="vf-divider" style={{ left: `${v}%` }}></div>
@@ -1162,9 +1180,9 @@ export default function Home() {
       {/* ============ FINAL CTA ============ */}
       <section className="wrap">
         <div className="final-cta pop-3d">
-          <span className="eyebrow" style={{ justifyContent: "center" }}>Verified, not suggested</span>
+          <span className="eyebrow" style={{ justifyContent: "center" }}>Interactive Remediation Cockpit</span>
           <h2>Run your first audit before this page finishes loading the next one.</h2>
-          <p>Paste a URL or drop screenshots. Get a dual-engine report with proven fixes — free, instantly.</p>
+          <p>Paste a URL or drop screenshots. Get a dual-engine report with AI-assisted fix suggestions — free, instantly.</p>
           <div className="cta-row">
             <button onClick={handleScrollToForm} className="btn btn-primary">
               Start free audit
@@ -1183,7 +1201,7 @@ export default function Home() {
                 UX-Auditor
               </div>
               <p style={{ color: "var(--muted-2)", fontSize: "13px", maxWidth: "240px", marginTop: "8px" }}>
-                Dual-engine UX &amp; accessibility audits with fixes that are proven, not promised.
+                Dual-engine UX &amp; accessibility audits with interactive before/after fix simulation.
               </p>
             </div>
             <div className="foot-cols">
@@ -1207,7 +1225,7 @@ export default function Home() {
           </div>
           <div className="foot-bottom">
             <span>© 2026 UX-Auditor. All rights reserved.</span>
-            <span className="mono">status: all systems verified ✓</span>
+            <span className="mono">status: all systems active ✓</span>
           </div>
         </div>
       </footer>

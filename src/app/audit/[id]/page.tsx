@@ -224,7 +224,7 @@ function getIssueImpact(issue: any): string {
 }
 
 function shouldShowFixBadge(status: string): boolean {
-  return ["success", "failed", "pending"].includes(status.toLowerCase());
+  return ["success", "failed", "pending", "not_applicable"].includes(status.toLowerCase());
 }
 
 function formatSelector(selector: string | null): string {
@@ -1669,7 +1669,7 @@ ${fixesPlanText || "No issues selected."}`;
                             delta={typeof issue.scoreDelta === "number" && issue.scoreDelta !== null ? issue.scoreDelta : estimateIssueScoreDelta(issue)}
                             severity={issue.severity}
                           />
-                          {showFixBadge && <FixBadge status={issue.verifiedFixStatus} />}
+                          {showFixBadge && <FixBadge status={issue.verifiedFixStatus} isScreenshot={audit?.inputType === "SCREENSHOT"} />}
                           
                           {/* Remediation Eligibility Badge */}
                           {remediationMode === "remediate" && (
