@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator } from "@/components/ui/badges";
+import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator, ScoreDeltaBadge } from "@/components/ui/badges";
+import { estimateIssueScoreDelta, estimateSelectedScore } from "@/lib/services/score-delta";
 import type { GitHubRepoInfo, GitHubBranchInfo, RemediationResponse, RemediationStep, UpgradedRemediationPlan, PatchPlanItem } from "@/types";
 
 interface Issue {
@@ -815,6 +816,16 @@ export default function AuditPage() {
     ? audit.issues
     : audit.issues.filter(i => i.severity === filter);
 
+  const topImpactIssues = [...audit.issues]
+    .map(issue => ({
+      ...issue,
+      calculatedDelta: typeof issue.scoreDelta === "number" && issue.scoreDelta !== null
+        ? issue.scoreDelta
+        : estimateIssueScoreDelta(issue)
+    }))
+    .sort((a, b) => b.calculatedDelta - a.calculatedDelta)
+    .slice(0, 3);
+
   const severityCounts = {
     critical: audit.issues.filter(i => i.severity === "critical").length,
     serious: audit.issues.filter(i => i.severity === "serious").length,
@@ -917,6 +928,37 @@ export default function AuditPage() {
                   <span className="text-lg font-bold text-emerald-700">✓ {verifiedCount}</span>
                 </div>
               </div>
+
+              {topImpactIssues.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-gray-100 animate-fadeIn">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Top impact fixes</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {topImpactIssues.map((issue) => {
+                      return (
+                        <div key={issue.id} className="bg-gray-50 border border-gray-150 rounded-xl p-3.5 flex flex-col justify-between gap-2 shadow-sm">
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                              <SeverityBadge severity={issue.severity} />
+                              <span className="text-[10px] font-bold text-purple-850 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full select-none" title="Estimated score lift if this issue is fixed">
+                                +{issue.calculatedDelta} potential
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug">
+                              {getIssueTitle(issue)}
+                            </h4>
+                          </div>
+                          <button
+                            onClick={() => highlightIssue(issue.id)}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 mt-1 hover:underline cursor-pointer self-start"
+                          >
+                            View →
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1184,25 +1226,36 @@ export default function AuditPage() {
                     } ${remediationMode === "remediate" && !fixable ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      {/* Remediation checkbox */}
-                      {remediationMode === "remediate" && (
+                      {/* Selection checkbox for prediction/remediation */}
+                      {(remediationMode === "remediate" || audit.inputType === "SCREENSHOT" || remediationMode === "browse") && (
                         <div className="flex-shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                          {fixable ? (
-                            <label className="flex items-center cursor-pointer" title="Include in GitHub remediation">
+                          {remediationMode === "remediate" ? (
+                            fixable ? (
+                              <label className="flex items-center cursor-pointer" title="Include in GitHub remediation">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleIssueSelection(issue.id)}
+                                  className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                />
+                              </label>
+                            ) : (
+                              <div 
+                                className="w-4 h-4 rounded border border-gray-200 bg-gray-50 cursor-not-allowed flex items-center justify-center text-[10px] text-gray-400" 
+                                title={`Unsupported: ${getUnsupportedReasonClient(issue)}`}
+                              >
+                                ✕
+                              </div>
+                            )
+                          ) : (
+                            <label className="flex items-center cursor-pointer" title="Select to predict score lift">
                               <input
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleIssueSelection(issue.id)}
-                                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                               />
                             </label>
-                          ) : (
-                            <div 
-                              className="w-4 h-4 rounded border border-gray-200 bg-gray-50 cursor-not-allowed flex items-center justify-center text-[10px] text-gray-400" 
-                              title={`Unsupported: ${getUnsupportedReasonClient(issue)}`}
-                            >
-                              ✕
-                            </div>
                           )}
                         </div>
                       )}
@@ -1212,6 +1265,10 @@ export default function AuditPage() {
                           <SeverityBadge severity={issue.severity} />
                           <SourceBadge source={issue.source} />
                           <ConfidenceBadge confidence={issue.confidence} />
+                          <ScoreDeltaBadge
+                            delta={typeof issue.scoreDelta === "number" && issue.scoreDelta !== null ? issue.scoreDelta : estimateIssueScoreDelta(issue)}
+                            severity={issue.severity}
+                          />
                           {showFixBadge && <FixBadge status={issue.verifiedFixStatus} />}
                           
                           {/* Remediation Eligibility Badge */}
@@ -1599,42 +1656,71 @@ export default function AuditPage() {
       </main>
 
       {/* ── STICKY REMEDIATION BAR ── */}
-      {selectedIssueIds.size > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-1/2 md:translate-x-1/2 bg-white/90 backdrop-blur-md border border-gray-200/80 shadow-[0_8px_32px_rgba(0,0,0,0.12)] z-50 rounded-2xl max-w-4xl w-[calc(100%-2rem)] mx-auto animate-slideUp">
-          <div className="px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-sm">
-                <span className="font-extrabold text-sm">{selectedIssueIds.size}</span>
+      {selectedIssueIds.size > 0 && (() => {
+        const currentScore = audit.score || 0;
+        const predictedScore = estimateSelectedScore(audit.score, audit.issues, selectedIssueIds) || currentScore;
+        const potentialLift = predictedScore - currentScore;
+
+        return (
+          <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-1/2 md:translate-x-1/2 bg-white/95 backdrop-blur-md border border-gray-200 shadow-[0_8px_32px_rgba(0,0,0,0.15)] z-50 rounded-2xl max-w-4xl w-[calc(100%-2rem)] mx-auto animate-slideUp">
+            <div className="px-5 py-4 flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-3 border-r border-gray-100 pr-4 flex-shrink-0">
+                    <div className="w-8 h-8 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-sm">
+                      <span className="font-extrabold text-sm">{selectedIssueIds.size}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block leading-none mb-1">Selected fixes</span>
+                      <span className="text-xs font-bold text-gray-900 leading-none">
+                        {selectedIssueIds.size === 1 ? "1 issue selected" : `${selectedIssueIds.size} issues selected`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-5 text-xs font-medium text-gray-500">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold leading-none mb-1">Current score</span>
+                      <span className="font-extrabold text-gray-900 text-sm leading-none">{currentScore}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold leading-none mb-1">Predicted score</span>
+                      <span className="font-extrabold text-emerald-650 text-sm leading-none">{predictedScore}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold leading-none mb-1">Potential lift</span>
+                      <span className="font-extrabold text-emerald-650 text-sm leading-none">+{potentialLift}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end flex-shrink-0">
+                  <button
+                    onClick={clearSelection}
+                    className="px-4 py-2 border border-gray-200 text-gray-600 hover:text-gray-950 hover:bg-gray-55 rounded-xl text-xs font-bold transition flex-1 sm:flex-initial text-center cursor-pointer select-none"
+                  >
+                    Clear
+                  </button>
+                  {audit.inputType !== "SCREENSHOT" && (
+                    <button
+                      onClick={openRemediationModal}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm hover:shadow transition active:scale-95 duration-150 text-xs flex items-center justify-center gap-2 flex-1 sm:flex-initial text-center cursor-pointer select-none"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+                      </svg>
+                      Review &amp; Create PR
+                    </button>
+                  )}
+                </div>
               </div>
-              <div>
-                <span className="text-sm font-bold text-gray-900 block">
-                  {selectedIssueIds.size === 1 ? "1 issue" : `${selectedIssueIds.size} issues`} selected for GitHub PR
-                </span>
-                <span className="text-[10px] text-gray-500 font-medium">
-                  Includes automatic framework fixes and manual review report
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-              <button
-                onClick={clearSelection}
-                className="px-4 py-2 border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl text-xs font-bold transition flex-1 sm:flex-initial text-center cursor-pointer"
-              >
-                Clear
-              </button>
-              <button
-                onClick={openRemediationModal}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm hover:shadow transition active:scale-95 duration-150 text-xs flex items-center justify-center gap-2 flex-1 sm:flex-initial text-center cursor-pointer"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
-                </svg>
-                Review &amp; Create PR
-              </button>
+              <p className="text-[10px] text-gray-500 font-semibold border-t pt-2 border-gray-100 block">
+                {audit.inputType === "SCREENSHOT"
+                  ? "Predicted visual UX score after addressing selected findings"
+                  : "Predicted score after fixing selected issues"}
+              </p>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* ── REMEDIATION MODAL ── */}
       {showRemediationModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !remediationStep && setShowRemediationModal(false)}>

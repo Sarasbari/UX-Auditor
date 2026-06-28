@@ -187,3 +187,30 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
     </div>
   );
 }
+
+interface ScoreDeltaBadgeProps {
+  delta: number;
+  severity: string;
+  className?: string;
+}
+
+export function ScoreDeltaBadge({ delta, severity, className }: ScoreDeltaBadgeProps) {
+  const cleanSeverity = (severity || "").toLowerCase();
+  const isProminent = cleanSeverity === "critical" || cleanSeverity === "serious";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border tracking-normal",
+        isProminent
+          ? "bg-purple-100 text-purple-800 border-purple-200"
+          : "bg-gray-100 text-gray-600 border-gray-200",
+        className
+      )}
+      title="Estimated score lift if this issue is fixed"
+    >
+      +{delta} potential
+    </span>
+  );
+}
+

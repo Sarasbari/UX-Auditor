@@ -150,6 +150,51 @@ def calculate_ux_score(issues: List[Dict[str, Any]]) -> int:
     score = 100 - total_penalty
     return max(0, min(100, round(score)))
 
+def estimate_issue_score_delta(issue: Dict[str, Any]) -> int:
+    """
+    Estimates the potential score lift for fixing a single issue.
+    Matches the TypeScript implementation in src/lib/services/score-delta.ts.
+    """
+    severity = (issue.get("severity") or "").lower()
+    category = (issue.get("category") or "").lower()
+    confidence = (issue.get("confidence") or "").lower()
+    source = (issue.get("source") or "").lower()
+
+    # 1. Base Score based on severity
+    base_score = 4
+    if severity == "critical":
+        base_score = 12
+    elif severity == "serious":
+        base_score = 8
+    elif severity == "moderate":
+        base_score = 4
+    elif severity == "minor":
+        base_score = 2
+
+    # 2. Confidence Modifier
+    confidence_modifier = 0.8
+    if confidence == "high":
+        confidence_modifier = 1.0
+    elif confidence == "medium":
+        confidence_modifier = 0.8
+    elif confidence == "low":
+        confidence_modifier = 0.5
+
+    # 3. Source Modifier
+    source_modifier = 1.0
+    if source == "screenshot_vision":
+        source_modifier = 0.75
+
+    # 4. Category Modifier
+    category_modifier = 1.0
+    if category == "accessibility":
+        category_modifier = 1.1
+    elif category == "design_quality":
+        category_modifier = 0.9
+
+    raw_delta = base_score * confidence_modifier * source_modifier * category_modifier
+    return max(1, min(15, round(raw_delta)))
+
 async def rerank_and_generate_fixes(raw_findings: List[Dict[str, Any]], url: str) -> Dict[str, Any]:
     """
     Groups and deduplicates raw findings, sends them to GPT-4o for reranking/patch generation,
@@ -530,7 +575,7 @@ async def chat_with_audit_report(
     # ── INTENT DETECTION ──────────────────────────────────────────────────
     def detect_intent(msg: str) -> str:
         m = msg.lower()
-        if any(k in m for k in ["improve score", "raise score", "increase score", "better score", "how to improve"]):
+        if any(k in m for k in ["improve score", "raise score", "increase score", "better score", "how to improve", "highest impact", "highest-impact", "high impact", "highest score delta"]):
             return "improve_score"
         if any(k in m for k in ["fix first", "priority", "most important", "start with", "what should i fix"]):
             return "fix_first"
@@ -555,10 +600,9 @@ async def chat_with_audit_report(
     # ── ISSUE RANKING ─────────────────────────────────────────────────────
     def rank_issues(issue_list: List[Dict]) -> List[Dict]:
         sev_order = {"critical": 0, "serious": 1, "moderate": 2, "minor": 3}
-        conf_order = {"high": 0, "medium": 1, "low": 2}
         return sorted(issue_list, key=lambda i: (
+            - (i.get("scoreDelta") if i.get("scoreDelta") is not None else estimate_issue_score_delta(i)),
             sev_order.get((i.get("severity") or "moderate").lower(), 2),
-            conf_order.get((i.get("confidence") or "medium").lower(), 1),
         ))
 
     # ── FORMAT ISSUE LINE ─────────────────────────────────────────────────
@@ -567,7 +611,8 @@ async def chat_with_audit_report(
         desc = issue.get("description", "")
         sel = issue.get("elementSelector", "")
         fix = issue.get("fixSuggestion", "")
-        lines = [f"{idx + 1}. **[{sev}]** {desc}"]
+        delta = issue.get("scoreDelta") if issue.get("scoreDelta") is not None else estimate_issue_score_delta(issue)
+        lines = [f"{idx + 1}. **[{sev}]** {desc} *(estimated impact: +{delta} potential lift)*"]
         if sel:
             lines.append(f"   - Element: `{sel}`")
         if fix:
@@ -578,10 +623,10 @@ async def chat_with_audit_report(
     def handle_improve_score() -> Dict:
         ranked = rank_issues(issues)[:5]
         lines = [f"## How to improve your UX score (currently **{audit_score}/100**)\n"]
-        lines.append("Focus on these top-priority issues first:\n")
+        lines.append("Focus on these issues with the highest estimated impact first:\n")
         for idx, issue in enumerate(ranked):
             lines.append(fmt(issue, idx))
-        lines.append("\n---\n*Fixing the top 3 issues could improve your score by 10-20 points.*")
+        lines.append("\n---\n*Fixing these issues provides the best potential lift to improve your score.*")
         return {
             "response": "\n".join(lines),
             "citedIssueIds": [i.get("id") for i in ranked if i.get("id")],
@@ -591,7 +636,7 @@ async def chat_with_audit_report(
     def handle_fix_first() -> Dict:
         ranked = rank_issues(issues)[:5]
         lines = ["## Priority fix order\n"]
-        lines.append("Based on severity, confidence, and user impact:\n")
+        lines.append("Based on estimated impact and severity, here is the suggested order to address findings:\n")
         for idx, issue in enumerate(ranked):
             lines.append(fmt(issue, idx))
         return {
@@ -726,7 +771,8 @@ async def chat_with_audit_report(
                         "ruleId": i.get("ruleId"),
                         "actualValue": i.get("actualValue"),
                         "expectedValue": i.get("expectedValue"),
-                        "patch": i.get("fixDiff", {}).get("patched") if i.get("fixDiff") else None
+                        "patch": i.get("fixDiff", {}).get("patched") if i.get("fixDiff") else None,
+                        "scoreDelta": i.get("scoreDelta") if i.get("scoreDelta") is not None else estimate_issue_score_delta(i)
                     }
                     for i in issues
                 ]
@@ -734,7 +780,8 @@ async def chat_with_audit_report(
 
             system_prompt = f"""You are a senior UX auditor and accessibility engineer.
 You have access to the complete audit report below. Answer ONLY from the audit data provided.
-Prioritize issues by severity, confidence, and user impact. Cite issue IDs when referencing specific findings.
+Prioritize issues by scoreDelta first (higher values first), then severity. Cite issue IDs when referencing specific findings.
+Always use honest estimation language when discussing score improvements (e.g., "estimated impact", "potential lift", "predicted score"). Do not use guaranteed language (e.g., do not say "will improve" or "proven score increase").
 Do not invent findings. If the user asks for code fixes, produce practical HTML/CSS examples.
 
 AUDIT REPORT:
@@ -808,6 +855,7 @@ Since you only have a static image of the user interface:
 - Categorize each issue under: accessibility, ux_heuristic, or design_quality.
 - Assign ruleId from one of: visual-hierarchy, contrast-risk, spacing, cta-clarity, form-clarity, layout-density, readability, navigation-clarity.
 - Give a score from 0 to 100 representing overall design/UX quality, deducting points appropriately for issues.
+- For each issue, estimate the score impact (scoreDelta) as an integer from 1 to 12.
 - For each issue, estimate approximate normalized coordinates (from 0.0 to 1.0 relative to the image dimensions) where the issue is visually located. Specify this as a boundingBox. If the issue is global or cannot be localized, boundingBox can be null.
 - Labels in boundingBox must be short, 2-5 words.
 
@@ -840,7 +888,7 @@ Respond ONLY with a valid JSON object matching this exact schema:
         "height": 0.18,
         "label": "short visual label"
       },
-      "scoreDelta": 10
+      "scoreDelta": 6
     }
   ]
 }

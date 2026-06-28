@@ -17,6 +17,7 @@ export interface RawIssue {
   ruleId?: string | null;
   sampleElements?: any;
   pageUrl?: string | null;
+  scoreDelta?: number | null;
 }
 
 /**
