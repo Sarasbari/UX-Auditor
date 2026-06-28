@@ -361,6 +361,7 @@ export default function AuditPage() {
   const [filter, setFilter] = useState<string>("all");
   const [isJudgeMode, setIsJudgeMode] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedNarrative, setCopiedNarrative] = useState(false);
   const [showSimulator, setShowSimulator] = useState(false);
   const [simulatorSelectedIds, setSimulatorSelectedIds] = useState<Set<string>>(new Set());
   const [copiedFixPlan, setCopiedFixPlan] = useState(false);
@@ -890,6 +891,14 @@ ${reportData.demoNarrative}`;
     });
   };
 
+  const handleCopyNarrative = () => {
+    if (!reportData?.demoNarrative) return;
+    navigator.clipboard.writeText(reportData.demoNarrative).then(() => {
+      setCopiedNarrative(true);
+      setTimeout(() => setCopiedNarrative(false), 2000);
+    });
+  };
+
   const openSimulator = (preselectedId?: string) => {
     if (!audit) return;
     
@@ -1015,7 +1024,7 @@ ${fixesPlanText || "No issues selected."}`;
                       onClick={() => setIsJudgeMode(!isJudgeMode)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition border cursor-pointer select-none active:scale-95 duration-100 ${
                         isJudgeMode
-                          ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 shadow-sm"
+                          ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-700 shadow-sm"
                           : "bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200"
                       }`}
                     >
@@ -1110,34 +1119,35 @@ ${fixesPlanText || "No issues selected."}`;
         </div>
 
         {isJudgeMode && reportData && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg mb-8 text-white space-y-6 animate-fadeIn">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-8 text-slate-800 space-y-6 animate-fadeIn">
             {/* Header section */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-800">
-              <div>
-                <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-200">
-                  ⚖️ Judge Mode Executive Report
-                </h3>
-                <p className="text-xs text-slate-400 mt-1 font-sans">
-                  Demo-ready presentation summary for stakeholders, judges, and product owners.
-                </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-lg">⚖️</span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Judge Mode Executive Report
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-sans">
+                    Presentation-ready summary for stakeholders, judges, and product owners.
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 {audit.inputType === "SCREENSHOT" ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    Visual Screenshot Audit
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    📷 Visual Screenshot Audit
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live URL Audit
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    🌐 Live URL Audit
                   </span>
                 )}
                 
                 <button
                   type="button"
                   onClick={handleCopyExecutiveSummary}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 duration-100 cursor-pointer select-none"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 duration-100 cursor-pointer select-none"
                 >
                   {copied ? (
                     <>
@@ -1155,115 +1165,140 @@ ${fixesPlanText || "No issues selected."}`;
               </div>
             </div>
 
-            {/* Score block */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/50 border border-slate-800 rounded-xl p-5 items-center">
-              <div className="flex flex-col items-center md:items-start text-center md:text-left">
-                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Current Usability Score</span>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-4xl font-black text-white">{audit.score ?? "N/A"}</span>
-                  <span className="text-xs text-slate-500">/ 100</span>
+            {/* Score strip — Three clean stat cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Current Score Card */}
+              <div className="bg-slate-50 border border-gray-200 rounded-xl p-5 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Score</span>
+                <div className="flex items-baseline gap-1 mt-2">
+                  <span className="text-3xl font-black text-slate-800">{audit.score ?? "N/A"}</span>
+                  <span className="text-xs text-slate-400">/ 100</span>
                 </div>
-                {audit.score !== null && (
-                  <span className="text-xs text-slate-400 mt-1 font-semibold">{reportData.scoreLabel}</span>
-                )}
-              </div>
-              
-              <div className="flex flex-col items-center justify-center text-center">
-                <span className="text-2xl text-purple-400 animate-pulse">➔</span>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Optimization Lift</span>
+                <div className="text-[11px] text-slate-500 mt-2 font-medium">
+                  {audit.score !== null ? reportData.scoreLabel : "No score calculated"}
+                </div>
               </div>
 
-              <div className="flex flex-col items-center md:items-end text-center md:text-right">
-                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Predicted Post-Fix Score</span>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-4xl font-black text-emerald-400">{reportData.predictedScoreAfterTopFixes ?? "N/A"}</span>
-                  <span className="text-xs text-slate-500">/ 100</span>
-                </div>
-                {audit.score !== null && reportData.predictedScoreAfterTopFixes !== null && (
-                  <span className="text-xs font-bold text-emerald-300 mt-1">
-                    +{reportData.predictedScoreAfterTopFixes - audit.score} points potential lift
+              {/* Potential Lift Card */}
+              <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-5 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Potential Lift</span>
+                <div className="flex items-baseline gap-1 mt-2">
+                  <span className="text-3xl font-black text-emerald-600">
+                    +{(() => {
+                      const curr = audit.score ?? 0;
+                      const pred = reportData.predictedScoreAfterTopFixes ?? curr;
+                      return pred - curr;
+                    })()}
                   </span>
-                )}
+                  <span className="text-xs text-emerald-500">points</span>
+                </div>
+                <div className="text-[11px] text-emerald-600 mt-2 font-medium">
+                  Estimated improvement lift
+                </div>
+              </div>
+
+              {/* Predicted Score Card */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Predicted Score</span>
+                <div className="flex items-baseline gap-1 mt-2">
+                  <span className="text-3xl font-black text-emerald-700">{reportData.predictedScoreAfterTopFixes ?? "N/A"}</span>
+                  <span className="text-xs text-emerald-500">/ 100</span>
+                </div>
+                <div className="text-[11px] text-emerald-700 mt-2 font-semibold">
+                  Post-remediation estimate
+                </div>
               </div>
             </div>
 
-            {/* Verdict and One Line Summary */}
-            <div className="bg-slate-950/20 border border-slate-800 rounded-xl p-4.5 space-y-2">
+            {/* UX Health Verdict */}
+            <div className={`border-l-4 rounded-r-xl p-4 space-y-2 ${
+              reportData.riskLevel === "High" ? "border-red-500 bg-red-50/30 text-red-900" :
+              reportData.riskLevel === "Medium" ? "border-amber-500 bg-amber-50/30 text-amber-900" :
+              "border-emerald-500 bg-emerald-50/30 text-emerald-900"
+            }`}>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-purple-400 uppercase tracking-widest">UX Health Verdict</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                  reportData.riskLevel === "High" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                  reportData.riskLevel === "Medium" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
-                  "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                <span className="text-[10px] font-bold uppercase tracking-wider">UX Health Verdict</span>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                  reportData.riskLevel === "High" ? "bg-red-100/50 text-red-800 border-red-200" :
+                  reportData.riskLevel === "Medium" ? "bg-amber-100/50 text-amber-800 border-amber-200" :
+                  "bg-emerald-100/50 text-emerald-800 border-emerald-200"
                 }`}>
                   {reportData.riskLevel} Risk Profile
                 </span>
               </div>
-              <p className="text-sm font-semibold text-white leading-snug">{reportData.oneLineSummary}</p>
-              <p className="text-xs text-slate-350 leading-relaxed font-sans mt-2">{reportData.verdict}</p>
+              <p className="text-sm font-bold leading-snug">{reportData.oneLineSummary}</p>
+              <p className="text-xs leading-relaxed opacity-90">{reportData.verdict}</p>
             </div>
 
             {/* Top Risks and Top Fixes Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Top Risks */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Top Risks</h4>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Risks</h4>
                 {reportData.topRisks.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No significant risks identified.</p>
                 ) : (
                   <div className="space-y-3">
-                    {reportData.topRisks.map((risk, idx) => (
-                      <div key={idx} className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4 space-y-1.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <h5 className="text-xs font-bold text-white flex items-center gap-2 leading-tight">
-                            <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-slate-400 flex-shrink-0">
-                              {idx + 1}
+                    {reportData.topRisks.map((risk, idx) => {
+                      const sev = risk.severity.toLowerCase();
+                      const borderClass =
+                        sev === "critical" ? "border-l-4 border-red-500" :
+                        sev === "serious" ? "border-l-4 border-orange-500" :
+                        sev === "moderate" ? "border-l-4 border-amber-500" :
+                        "border-l-4 border-blue-500";
+                      return (
+                        <div key={idx} className={`bg-gray-50/50 border border-gray-200 rounded-xl p-4 space-y-2 ${borderClass}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <h5 className="text-xs font-bold text-slate-800 flex items-center gap-2 leading-tight">
+                              <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-slate-500 flex-shrink-0">
+                                {idx + 1}
+                              </span>
+                              {risk.title}
+                            </h5>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                              sev === "critical" ? "bg-red-50 text-red-700 border-red-100" :
+                              sev === "serious" ? "bg-orange-50 text-orange-700 border-orange-100" :
+                              sev === "moderate" ? "bg-amber-50 text-amber-700 border-amber-100" :
+                              "bg-blue-50 text-blue-700 border-blue-100"
+                            }`}>
+                              {risk.severity}
                             </span>
-                            {risk.title}
-                          </h5>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${
-                            risk.severity.toLowerCase() === "critical" ? "bg-red-500/10 text-red-300 border-red-500/20" :
-                            risk.severity.toLowerCase() === "serious" ? "bg-orange-500/10 text-orange-300 border-orange-500/20" :
-                            risk.severity.toLowerCase() === "moderate" ? "bg-amber-500/10 text-amber-300 border-amber-500/20" :
-                            "bg-blue-500/10 text-blue-300 border-blue-500/20"
-                          }`}>
-                            {risk.severity}
-                          </span>
+                          </div>
+                          <p className="text-xs text-slate-500 leading-relaxed pl-7">{risk.explanation}</p>
                         </div>
-                        <p className="text-xs text-slate-400 leading-relaxed font-sans pl-7">{risk.explanation}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
               {/* Highest-Impact Fixes */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Highest-Impact Fixes</h4>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Highest-Impact Fixes</h4>
                 {reportData.topImpactFixes.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No fixes available.</p>
                 ) : (
                   <div className="space-y-3">
                     {reportData.topImpactFixes.map((fix, idx) => (
-                      <div key={idx} className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between gap-3">
-                        <div className="space-y-1.5">
+                      <div key={idx} className="bg-gray-50/50 border border-gray-200 rounded-xl p-4 flex flex-col justify-between gap-3 border-l-4 border-emerald-500">
+                        <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
-                            <h5 className="text-xs font-bold text-white flex items-center gap-2 leading-tight">
-                              <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-slate-400 flex-shrink-0">
+                            <h5 className="text-xs font-bold text-slate-800 flex items-center gap-2 leading-tight">
+                              <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-slate-500 flex-shrink-0">
                                 {idx + 1}
                               </span>
                               {fix.title}
                             </h5>
-                            <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded flex-shrink-0">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">
                               +{fix.scoreDelta} Lift
                             </span>
                           </div>
-                          <p className="text-xs text-slate-400 leading-relaxed font-sans pl-7">{fix.reason}</p>
+                          <p className="text-xs text-slate-500 leading-relaxed pl-7">{fix.reason}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => highlightIssue(fix.issueId)}
-                          className="inline-flex items-center justify-center px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/10 hover:border-indigo-500/20 text-xs font-bold rounded-lg transition active:scale-95 duration-100 cursor-pointer self-start ml-7"
+                          className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 text-xs font-bold rounded-lg transition active:scale-95 duration-100 cursor-pointer self-start ml-7 shadow-sm"
                         >
                           View issue →
                         </button>
@@ -1275,24 +1310,24 @@ ${fixesPlanText || "No issues selected."}`;
             </div>
 
             {/* Business Impact & Accessibility / Design Risk */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-200">
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Business Impact</h4>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Business Impact</h4>
                 <ul className="space-y-2.5">
                   {reportData.businessImpact.map((item, idx) => (
-                    <li key={idx} className="text-xs text-slate-300 flex items-start gap-2 leading-relaxed">
-                      <span className="text-indigo-400 pt-1 text-[8px] flex-shrink-0">■</span>
+                    <li key={idx} className="text-xs text-slate-600 flex items-start gap-2.5 leading-relaxed">
+                      <span className="w-1.5 h-1.5 rounded bg-blue-500 mt-1.5 flex-shrink-0" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Accessibility / Design Risk</h4>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Accessibility / Design Risk</h4>
                 <ul className="space-y-2.5">
                   {reportData.accessibilityImpact.map((item, idx) => (
-                    <li key={idx} className="text-xs text-slate-300 flex items-start gap-2 leading-relaxed">
-                      <span className="text-indigo-400 pt-1 text-[8px] flex-shrink-0">■</span>
+                    <li key={idx} className="text-xs text-slate-600 flex items-start gap-2.5 leading-relaxed">
+                      <span className="w-1.5 h-1.5 rounded bg-amber-500 mt-1.5 flex-shrink-0" />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -1301,9 +1336,29 @@ ${fixesPlanText || "No issues selected."}`;
             </div>
 
             {/* Demo Narrative */}
-            <div className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4.5 space-y-2">
-              <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Demo Narrative</h4>
-              <p className="text-xs text-slate-350 leading-relaxed font-sans italic">{reportData.demoNarrative}</p>
+            <div className="bg-blue-50/25 border border-blue-100 rounded-xl p-5 space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-1.5">
+                  <span>📝</span> Demo Narrative
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleCopyNarrative}
+                  className="text-[10px] font-bold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg transition active:scale-95 shadow-sm cursor-pointer"
+                >
+                  {copiedNarrative ? "✓ Copied" : "Copy narrative"}
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed font-sans">{reportData.demoNarrative}</p>
+              {audit.inputType === "SCREENSHOT" ? (
+                <p className="text-[10px] text-slate-400 italic">
+                  * Screenshot findings are visual estimates based on uploaded UI imagery. No DOM verification.
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-400 italic">
+                  * Live URL findings are based on active DOM evidence and automated accessibility checks.
+                </p>
+              )}
             </div>
           </div>
         )}
