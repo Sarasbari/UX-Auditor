@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { SeverityBadge, FixBadge, SourceBadge, ConfidenceBadge, ScoreDisplay, StatusIndicator, ScoreDeltaBadge } from "@/components/ui/badges";
 import { estimateIssueScoreDelta, estimateSelectedScore } from "@/lib/services/score-delta";
+import { buildExecutiveReport } from "@/lib/services/executive-report";
+import { buildSimulatedFixes } from "@/lib/services/fix-simulator";
 import type { GitHubRepoInfo, GitHubBranchInfo, RemediationResponse, RemediationStep, UpgradedRemediationPlan, PatchPlanItem } from "@/types";
 
 interface Issue {
@@ -357,6 +359,11 @@ export default function AuditPage() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [filter, setFilter] = useState<string>("all");
+  const [isJudgeMode, setIsJudgeMode] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
+  const [simulatorSelectedIds, setSimulatorSelectedIds] = useState<Set<string>>(new Set());
+  const [copiedFixPlan, setCopiedFixPlan] = useState(false);
 
   // ── Remediation state ──────────────────────────────────────────────────────
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
@@ -840,6 +847,115 @@ export default function AuditPage() {
 
   const scoreLabelInfo = audit.score !== null ? getScoreLabel(audit.score) : { label: "N/A", color: "bg-gray-100 text-gray-500", desc: "" };
 
+  const reportData = audit ? buildExecutiveReport(audit) : null;
+
+  const handleCopyExecutiveSummary = () => {
+    if (!audit || !reportData) return;
+    
+    const typeStr = audit.inputType === "SCREENSHOT" ? "Visual Screenshot Audit" : "Live URL Audit";
+    
+    const risksText = reportData.topRisks.map((r, i) => `${i + 1}. ${r.title} (${r.severity}): ${r.explanation}`).join("\n");
+    const fixesText = reportData.topImpactFixes.map((f, i) => `${i + 1}. ${f.title} (+${f.scoreDelta})`).join("\n");
+    const businessText = reportData.businessImpact.map(b => `- ${b}`).join("\n");
+    const accessText = reportData.accessibilityImpact.map(a => `- ${a}`).join("\n");
+
+    const plainTextText = `UX-Auditor Executive Report
+
+Audit type: ${typeStr}
+Current score: ${audit.score ?? "N/A"}
+Predicted after top fixes: ${reportData.predictedScoreAfterTopFixes ?? "N/A"}
+
+Verdict:
+${reportData.oneLineSummary}
+${reportData.verdict}
+
+Top risks:
+${risksText}
+
+Highest-impact fixes:
+${fixesText}
+
+Business impact:
+${businessText}
+
+Accessibility / Design Risk:
+${accessText}
+
+Demo narrative:
+${reportData.demoNarrative}`;
+
+    navigator.clipboard.writeText(plainTextText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const openSimulator = (preselectedId?: string) => {
+    if (!audit) return;
+    
+    if (preselectedId) {
+      setSimulatorSelectedIds(new Set([preselectedId]));
+    } else {
+      if (selectedIssueIds.size > 0) {
+        setSimulatorSelectedIds(new Set(selectedIssueIds));
+      } else {
+        // default to top 3 issues by scoreDelta descending
+        const sorted = [...audit.issues].sort((a, b) => {
+          const deltaA = typeof a.scoreDelta === "number" ? a.scoreDelta : estimateIssueScoreDelta(a);
+          const deltaB = typeof b.scoreDelta === "number" ? b.scoreDelta : estimateIssueScoreDelta(b);
+          return deltaB - deltaA;
+        });
+        const top3Ids = sorted.slice(0, 3).map(i => i.id);
+        setSimulatorSelectedIds(new Set(top3Ids));
+      }
+    }
+    setShowSimulator(true);
+  };
+
+  const handleCopyFixPlan = () => {
+    if (!audit) return;
+    
+    // Sort issues by scoreDelta descending
+    const selectedList = audit.issues
+      .filter(i => simulatorSelectedIds.has(i.id))
+      .map(issue => {
+        const delta = typeof issue.scoreDelta === "number" ? issue.scoreDelta : estimateIssueScoreDelta(issue);
+        return {
+          ...issue,
+          calculatedDelta: delta
+        };
+      })
+      .sort((a, b) => b.calculatedDelta - a.calculatedDelta);
+
+    const fixesDataList = buildSimulatedFixes(audit, selectedList.map(s => s.id));
+    const fixesPlanText = fixesDataList.map((fix, idx) => {
+      return `${idx + 1}. ${fix.title} (+${fix.scoreDelta})
+Before: ${fix.beforeSummary}
+After: ${fix.afterSummary}
+Implementation: ${fix.implementationHint}`;
+    }).join("\n\n");
+
+    const currentScore = audit.score;
+    const predictedScore = estimateSelectedScore(currentScore, audit.issues, Array.from(simulatorSelectedIds));
+    const potentialLift = (currentScore !== null && predictedScore !== null) 
+      ? `+${predictedScore - currentScore}` 
+      : "+0";
+
+    const plainText = `UX-Auditor Fix Simulation
+
+Current score: ${currentScore ?? "N/A"}
+Predicted score: ${predictedScore ?? "N/A"}
+Potential lift: ${potentialLift}
+
+Selected fixes:
+${fixesPlanText || "No issues selected."}`;
+
+    navigator.clipboard.writeText(plainText).then(() => {
+      setCopiedFixPlan(true);
+      setTimeout(() => setCopiedFixPlan(false), 2000);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="border-b bg-white">
@@ -884,30 +1000,52 @@ export default function AuditPage() {
             <div className="md:col-span-3 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="flex-1">
-                  <h2 className="text-lg font-bold text-gray-900">Executive Summary</h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-bold text-gray-900">Executive Summary</h2>
+                    <button
+                      type="button"
+                      onClick={() => setIsJudgeMode(!isJudgeMode)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition border cursor-pointer select-none active:scale-95 duration-100 ${
+                        isJudgeMode
+                          ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 shadow-sm"
+                          : "bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200"
+                      }`}
+                    >
+                      ⚖️ Judge Mode
+                    </button>
+                  </div>
                   <p className="text-sm text-gray-600 mt-1 leading-relaxed">
                     {audit.inputType === "SCREENSHOT"
                       ? "This is a visual screenshot-based UX audit. Findings focus on UI layout, contrast risk, spacing, CTA clarity, and design quality."
                       : `${getSummarySentence(audit.issues)} ${scoreLabelInfo.desc}`}
                   </p>
                 </div>
-                {audit.inputType !== "SCREENSHOT" && (
+                <div className="flex flex-wrap gap-2 flex-shrink-0 self-start sm:self-center">
                   <button
-                    onClick={() => {
-                      setRemediationMode("remediate");
-                      const element = document.getElementById("issues-list-section");
-                      if (element) {
-                        element.scrollIntoView({ behavior: "smooth" });
-                      }
-                    }}
-                    className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition text-sm self-start sm:self-center"
+                    type="button"
+                    onClick={() => openSimulator()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition text-sm cursor-pointer select-none"
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
-                    </svg>
-                    Create GitHub PR
+                    ⚡ Fix Simulator
                   </button>
-                )}
+                  {audit.inputType !== "SCREENSHOT" && (
+                    <button
+                      onClick={() => {
+                        setRemediationMode("remediate");
+                        const element = document.getElementById("issues-list-section");
+                        if (element) {
+                          element.scrollIntoView({ behavior: "smooth" });
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition text-sm"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+                      </svg>
+                      Create GitHub PR
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
@@ -962,6 +1100,205 @@ export default function AuditPage() {
             </div>
           </div>
         </div>
+
+        {isJudgeMode && reportData && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg mb-8 text-white space-y-6 animate-fadeIn">
+            {/* Header section */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-800">
+              <div>
+                <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-200">
+                  ⚖️ Judge Mode Executive Report
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 font-sans">
+                  Demo-ready presentation summary for stakeholders, judges, and product owners.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {audit.inputType === "SCREENSHOT" ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Visual Screenshot Audit
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live URL Audit
+                  </span>
+                )}
+                
+                <button
+                  type="button"
+                  onClick={handleCopyExecutiveSummary}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 duration-100 cursor-pointer select-none"
+                >
+                  {copied ? (
+                    <>
+                      <span>✓</span> Copied
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                      </svg>
+                      Copy Executive Summary
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Score block */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/50 border border-slate-800 rounded-xl p-5 items-center">
+              <div className="flex flex-col items-center md:items-start text-center md:text-left">
+                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Current Usability Score</span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-4xl font-black text-white">{audit.score ?? "N/A"}</span>
+                  <span className="text-xs text-slate-500">/ 100</span>
+                </div>
+                {audit.score !== null && (
+                  <span className="text-xs text-slate-400 mt-1 font-semibold">{reportData.scoreLabel}</span>
+                )}
+              </div>
+              
+              <div className="flex flex-col items-center justify-center text-center">
+                <span className="text-2xl text-purple-400 animate-pulse">➔</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Optimization Lift</span>
+              </div>
+
+              <div className="flex flex-col items-center md:items-end text-center md:text-right">
+                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">Predicted Post-Fix Score</span>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-4xl font-black text-emerald-400">{reportData.predictedScoreAfterTopFixes ?? "N/A"}</span>
+                  <span className="text-xs text-slate-500">/ 100</span>
+                </div>
+                {audit.score !== null && reportData.predictedScoreAfterTopFixes !== null && (
+                  <span className="text-xs font-bold text-emerald-300 mt-1">
+                    +{reportData.predictedScoreAfterTopFixes - audit.score} points potential lift
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Verdict and One Line Summary */}
+            <div className="bg-slate-950/20 border border-slate-800 rounded-xl p-4.5 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-purple-400 uppercase tracking-widest">UX Health Verdict</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                  reportData.riskLevel === "High" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                  reportData.riskLevel === "Medium" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                  "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                }`}>
+                  {reportData.riskLevel} Risk Profile
+                </span>
+              </div>
+              <p className="text-sm font-semibold text-white leading-snug">{reportData.oneLineSummary}</p>
+              <p className="text-xs text-slate-350 leading-relaxed font-sans mt-2">{reportData.verdict}</p>
+            </div>
+
+            {/* Top Risks and Top Fixes Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Top Risks */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Top Risks</h4>
+                {reportData.topRisks.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No significant risks identified.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {reportData.topRisks.map((risk, idx) => (
+                      <div key={idx} className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4 space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h5 className="text-xs font-bold text-white flex items-center gap-2 leading-tight">
+                            <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-slate-400 flex-shrink-0">
+                              {idx + 1}
+                            </span>
+                            {risk.title}
+                          </h5>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                            risk.severity.toLowerCase() === "critical" ? "bg-red-500/10 text-red-300 border-red-500/20" :
+                            risk.severity.toLowerCase() === "serious" ? "bg-orange-500/10 text-orange-300 border-orange-500/20" :
+                            risk.severity.toLowerCase() === "moderate" ? "bg-amber-500/10 text-amber-300 border-amber-500/20" :
+                            "bg-blue-500/10 text-blue-300 border-blue-500/20"
+                          }`}>
+                            {risk.severity}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed font-sans pl-7">{risk.explanation}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Highest-Impact Fixes */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Highest-Impact Fixes</h4>
+                {reportData.topImpactFixes.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No fixes available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {reportData.topImpactFixes.map((fix, idx) => (
+                      <div key={idx} className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between gap-3">
+                        <div className="space-y-1.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <h5 className="text-xs font-bold text-white flex items-center gap-2 leading-tight">
+                              <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] text-slate-400 flex-shrink-0">
+                                {idx + 1}
+                              </span>
+                              {fix.title}
+                            </h5>
+                            <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded flex-shrink-0">
+                              +{fix.scoreDelta} Lift
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed font-sans pl-7">{fix.reason}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => highlightIssue(fix.issueId)}
+                          className="inline-flex items-center justify-center px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/10 hover:border-indigo-500/20 text-xs font-bold rounded-lg transition active:scale-95 duration-100 cursor-pointer self-start ml-7"
+                        >
+                          View issue →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Business Impact & Accessibility / Design Risk */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Business Impact</h4>
+                <ul className="space-y-2.5">
+                  {reportData.businessImpact.map((item, idx) => (
+                    <li key={idx} className="text-xs text-slate-300 flex items-start gap-2 leading-relaxed">
+                      <span className="text-indigo-400 pt-1 text-[8px] flex-shrink-0">■</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Accessibility / Design Risk</h4>
+                <ul className="space-y-2.5">
+                  {reportData.accessibilityImpact.map((item, idx) => (
+                    <li key={idx} className="text-xs text-slate-300 flex items-start gap-2 leading-relaxed">
+                      <span className="text-indigo-400 pt-1 text-[8px] flex-shrink-0">■</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Demo Narrative */}
+            <div className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4.5 space-y-2">
+              <h4 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Demo Narrative</h4>
+              <p className="text-xs text-slate-350 leading-relaxed font-sans italic">{reportData.demoNarrative}</p>
+            </div>
+          </div>
+        )}
 
         <div id="issues-list-section" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── LEFT COLUMN: ISSUES LIST ── */}
@@ -1291,16 +1628,25 @@ export default function AuditPage() {
                         <p className="text-xs text-gray-500 mt-1 leading-normal">{issueImpact}</p>
                       </div>
 
-                      <div className="text-gray-400 mt-1 flex-shrink-0">
-                        <svg
-                          className={`w-4 h-4 transform transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2.5}
+                      <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openSimulator(issue.id)}
+                          className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-800 border border-blue-200 rounded-lg text-xs font-bold transition select-none active:scale-95 duration-100"
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
+                          Simulate Fix
+                        </button>
+                        <div className="text-gray-400">
+                          <svg
+                            className={`w-4 h-4 transform transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2.5}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
 
@@ -2181,6 +2527,325 @@ export default function AuditPage() {
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showSimulator && audit && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-7xl h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn text-white">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">⚡</span>
+                <div>
+                  <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">
+                    Before / After Fix Simulator
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Simulated preview of suggested optimization changes and predicted score lifts.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {audit.inputType === "SCREENSHOT" ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    Visual Screenshot Audit
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                    Live URL Audit
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowSimulator(false)}
+                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Score Strip & Actions */}
+            <div className="px-6 py-4 border-b border-slate-800/85 bg-slate-950/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
+              <div className="flex items-center gap-6">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block tracking-wider">Current Score</span>
+                  <span className="text-xl font-bold">{audit.score ?? "N/A"}</span>
+                </div>
+                <div className="text-slate-650">➔</div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block tracking-wider">Simulated Score</span>
+                  <span className="text-xl font-bold text-emerald-400">
+                    {estimateSelectedScore(audit.score, audit.issues, Array.from(simulatorSelectedIds)) ?? "N/A"}
+                  </span>
+                </div>
+                <div className="text-slate-650">|</div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block tracking-wider">Estimated Lift</span>
+                  <span className="text-sm font-bold text-emerald-300 font-sans">
+                    +{(() => {
+                      const curr = audit.score ?? 0;
+                      const pred = estimateSelectedScore(curr, audit.issues, Array.from(simulatorSelectedIds)) ?? curr;
+                      return pred - curr;
+                    })()} points
+                  </span>
+                </div>
+              </div>
+              
+              <button
+                type="button"
+                onClick={handleCopyFixPlan}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 duration-100 cursor-pointer select-none"
+              >
+                {copiedFixPlan ? (
+                  <>
+                    <span>✓</span> Copied
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                    Copy Fix Plan
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Main Area: Split Screen & Selection Sidebar */}
+            <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+              {/* Left & Right Preview Pane */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {simulatorSelectedIds.size === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3 py-16">
+                    <span className="text-4xl">🛠️</span>
+                    <p className="text-sm font-semibold">Select one or more issues in the sidebar to simulate fixes.</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const sortedSelected = audit.issues
+                      .filter(i => simulatorSelectedIds.has(i.id))
+                      .map(issue => {
+                        const delta = typeof issue.scoreDelta === "number" ? issue.scoreDelta : estimateIssueScoreDelta(issue);
+                        return { ...issue, calculatedDelta: delta };
+                      })
+                      .sort((a, b) => b.calculatedDelta - a.calculatedDelta);
+
+                    const simFixes = buildSimulatedFixes(audit, sortedSelected.map(s => s.id));
+
+                    return (
+                      <div className="space-y-8">
+                        {/* If screenshot audit, show visual simulation overlays before/after */}
+                        {audit.inputType === "SCREENSHOT" && audit.uploadedImageUrl && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-950/20 border border-slate-800/80 rounded-2xl p-4">
+                            {/* Before visual */}
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Before (Heatmap Active)</span>
+                              <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
+                                <img src={audit.uploadedImageUrl} className="w-full h-auto block max-h-[300px] object-contain mx-auto opacity-80" alt="Before Screenshot" />
+                                {sortedSelected.map((issue, idx) => {
+                                  if (!issue.boundingBox) return null;
+                                  const box = issue.boundingBox;
+                                  return (
+                                    <div
+                                      key={issue.id}
+                                      className="absolute border-2 border-red-500 rounded bg-red-500/10 flex items-center justify-center"
+                                      style={{
+                                        left: `${box.x * 100}%`,
+                                        top: `${box.y * 100}%`,
+                                        width: `${box.width * 100}%`,
+                                        height: `${box.height * 100}%`,
+                                      }}
+                                    >
+                                      <div className="bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow absolute -top-2.5 -left-2.5 border border-white">
+                                        {idx + 1}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Suggested After visual */}
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Suggested After (Simulated Preview)</span>
+                              <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
+                                <img src={audit.uploadedImageUrl} className="w-full h-auto block max-h-[300px] object-contain mx-auto" alt="After Screenshot" />
+                                {sortedSelected.map((issue, idx) => {
+                                  if (!issue.boundingBox) return null;
+                                  const box = issue.boundingBox;
+                                  return (
+                                    <div
+                                      key={issue.id}
+                                      className="absolute border-2 border-emerald-500 border-dashed rounded bg-emerald-500/5 flex items-center justify-center"
+                                      style={{
+                                        left: `${box.x * 100}%`,
+                                        top: `${box.y * 100}%`,
+                                        width: `${box.width * 100}%`,
+                                        height: `${box.height * 100}%`,
+                                      }}
+                                    >
+                                      <div className="bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow absolute -top-2.5 -left-2.5 border border-white flex items-center gap-1">
+                                        <span>✓</span> {idx + 1}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-[10px] text-slate-400 text-center italic mt-1.5">
+                                Visual simulation: markers indicate areas expected to improve after applying the recommendation.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* List of simulated fixes detail grid */}
+                        <div className="space-y-6">
+                          {simFixes.map((fix, idx) => {
+                            const originalIssue = sortedSelected[idx];
+                            const originalDiff = originalIssue.fixDiff as { original?: string; patched?: string } | null;
+                            return (
+                              <div key={fix.issueId} className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/40">
+                                {/* Fix Header Bar */}
+                                <div className="px-4 py-3 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-350">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="text-sm font-bold text-white">{fix.title}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${
+                                      fix.severity === "critical" ? "bg-red-500/10 text-red-300 border-red-500/25" :
+                                      fix.severity === "serious" ? "bg-orange-500/10 text-orange-300 border-orange-500/25" :
+                                      "bg-amber-500/10 text-amber-300 border-amber-500/25"
+                                    }`}>
+                                      {fix.severity}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                                      Estimated Lift: +{fix.scoreDelta}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Split View: Before vs Suggested After */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800/80">
+                                  {/* Before card */}
+                                  <div className="p-4 space-y-3">
+                                    <div>
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Current state</span>
+                                      <p className="text-xs text-slate-350 leading-relaxed font-sans mt-1">{fix.beforeSummary}</p>
+                                    </div>
+                                    {originalIssue.elementSelector && (
+                                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5">
+                                        <span className="text-[8px] font-bold text-slate-550 uppercase block tracking-wider">Affected Selector</span>
+                                        <code className="text-[10px] font-mono text-slate-400 break-all select-all block mt-0.5">
+                                          {originalIssue.elementSelector}
+                                        </code>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Suggested After card */}
+                                  <div className="p-4 space-y-3 bg-emerald-950/5">
+                                    <div>
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Suggested after state</span>
+                                      <p className="text-xs text-slate-300 leading-relaxed font-sans mt-1 font-semibold text-emerald-300">{fix.afterSummary}</p>
+                                    </div>
+                                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5">
+                                      <span className="text-[8px] font-bold text-slate-550 uppercase block tracking-wider">Implementation Guidance</span>
+                                      <p className="text-[10px] text-slate-350 font-sans leading-relaxed mt-0.5">{fix.implementationHint}</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Code snippets if originalDiff exists */}
+                                {originalDiff && originalDiff.original && originalDiff.patched && (
+                                  <div className="border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800/80 bg-slate-950">
+                                    <div className="p-4 space-y-1.5">
+                                      <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider block">Original Code snippet</span>
+                                      <pre className="text-[10px] font-mono text-red-300 overflow-x-auto bg-slate-900 p-3 rounded-lg border border-red-500/10 leading-relaxed max-h-48 overflow-y-auto">
+                                        <code>{originalDiff.original}</code>
+                                      </pre>
+                                    </div>
+                                    <div className="p-4 space-y-1.5">
+                                      <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">Suggested Patched Code</span>
+                                      <pre className="text-[10px] font-mono text-emerald-300 overflow-x-auto bg-slate-900 p-3 rounded-lg border border-emerald-500/10 leading-relaxed max-h-48 overflow-y-auto">
+                                        <code>{originalDiff.patched}</code>
+                                      </pre>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+
+              {/* Sidebar: Checkbox Selector list */}
+              <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-950 flex flex-col flex-shrink-0 h-64 lg:h-auto overflow-hidden">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select Fixes to Simulate</span>
+                  <span className="text-[10px] font-bold bg-slate-800 text-slate-350 px-2 py-0.5 rounded-full">
+                    {simulatorSelectedIds.size} selected
+                  </span>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {[...audit.issues]
+                    .map(issue => {
+                      const delta = typeof issue.scoreDelta === "number" ? issue.scoreDelta : estimateIssueScoreDelta(issue);
+                      return { ...issue, calculatedDelta: delta };
+                    })
+                    .sort((a, b) => b.calculatedDelta - a.calculatedDelta)
+                    .map((issue) => {
+                      const isChecked = simulatorSelectedIds.has(issue.id);
+                      return (
+                        <label
+                          key={issue.id}
+                          className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                            isChecked
+                              ? "bg-indigo-600/15 border-indigo-500/30 text-white shadow-sm"
+                              : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:bg-slate-900/50 hover:text-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setSimulatorSelectedIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(issue.id)) next.delete(issue.id);
+                                else next.add(issue.id);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-slate-700 bg-slate-850 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold text-slate-350 truncate">{getIssueTitle(issue)}</span>
+                              <span className="text-[9px] font-bold text-emerald-400 flex-shrink-0 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                +{issue.calculatedDelta}
+                              </span>
+                            </div>
+                            <span className="text-[9px] text-slate-500 block truncate mt-0.5">{issue.description}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+            
           </div>
         </div>
       )}
