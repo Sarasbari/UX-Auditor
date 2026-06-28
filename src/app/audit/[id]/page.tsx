@@ -929,10 +929,18 @@ ${reportData.demoNarrative}`;
 
     const fixesDataList = buildSimulatedFixes(audit, selectedList.map(s => s.id));
     const fixesPlanText = fixesDataList.map((fix, idx) => {
-      return `${idx + 1}. ${fix.title} (+${fix.scoreDelta})
-Before: ${fix.beforeSummary}
-After: ${fix.afterSummary}
-Implementation: ${fix.implementationHint}`;
+      const severityStr = fix.severity.charAt(0).toUpperCase() + fix.severity.slice(1);
+      let text = `Fix ${idx + 1}: ${fix.title} (+${fix.scoreDelta})
+Severity: ${severityStr}`;
+
+      if (fix.beforeCode && fix.afterCode) {
+        text += `\nBefore:\n${fix.beforeCode}\n\nAfter:\n${fix.afterCode}`;
+      } else {
+        text += `\nBefore:\n${fix.beforeSummary}\n\nAfter:\n${fix.afterSummary}`;
+      }
+
+      text += `\n\nImplementation:\n${fix.implementationHint}`;
+      return text;
     }).join("\n\n");
 
     const currentScore = audit.score;
@@ -2507,7 +2515,7 @@ ${fixesPlanText || "No issues selected."}`;
                       <div className="flex gap-2 justify-between border-t border-gray-100 pt-4">
                         <button
                           onClick={() => setWizardStep(3)}
-                          className="px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl text-xs font-bold transition cursor-pointer"
+                          className="px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-55 rounded-xl text-xs font-bold transition cursor-pointer"
                         >
                           Back
                         </button>
@@ -2532,35 +2540,35 @@ ${fixesPlanText || "No issues selected."}`;
       )}
 
       {showSimulator && audit && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-7xl h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn text-white">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn text-slate-900">
             
             {/* Header */}
-            <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950 flex-shrink-0">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/80 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <span className="text-xl">⚡</span>
+                <span className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-lg">⚡</span>
                 <div>
-                  <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">
+                  <h3 className="text-base font-bold text-slate-900">
                     Before / After Fix Simulator
                   </h3>
-                  <p className="text-[10px] text-slate-400">
-                    Simulated preview of suggested optimization changes and predicted score lifts.
+                  <p className="text-[11px] text-slate-500">
+                    Preview suggested fixes and estimated UX score lift before applying changes.
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 {audit.inputType === "SCREENSHOT" ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                    Visual Screenshot Audit
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-55 text-amber-700 border border-amber-200">
+                    📷 Visual Screenshot Audit
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                    Live URL Audit
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    🌐 Live URL Audit
                   </span>
                 )}
                 <button
                   onClick={() => setShowSimulator(false)}
-                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+                  className="p-1.5 hover:bg-gray-100 rounded-lg text-slate-400 hover:text-slate-700 transition cursor-pointer"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -2570,23 +2578,23 @@ ${fixesPlanText || "No issues selected."}`;
             </div>
 
             {/* Score Strip & Actions */}
-            <div className="px-6 py-4 border-b border-slate-800/85 bg-slate-950/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
+            <div className="px-6 py-3.5 border-b border-gray-100 bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
               <div className="flex items-center gap-6">
                 <div>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block tracking-wider">Current Score</span>
-                  <span className="text-xl font-bold">{audit.score ?? "N/A"}</span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase block tracking-wider">Current Score</span>
+                  <span className="text-xl font-bold text-slate-800">{audit.score ?? "N/A"}</span>
                 </div>
-                <div className="text-slate-650">➔</div>
+                <div className="text-slate-300 text-lg">→</div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block tracking-wider">Simulated Score</span>
-                  <span className="text-xl font-bold text-emerald-400">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase block tracking-wider">Predicted Score</span>
+                  <span className="text-xl font-bold text-emerald-600">
                     {estimateSelectedScore(audit.score, audit.issues, Array.from(simulatorSelectedIds)) ?? "N/A"}
                   </span>
                 </div>
-                <div className="text-slate-650">|</div>
+                <div className="text-slate-300">|</div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block tracking-wider">Estimated Lift</span>
-                  <span className="text-sm font-bold text-emerald-300 font-sans">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase block tracking-wider">Estimated Lift</span>
+                  <span className="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 font-sans">
                     +{(() => {
                       const curr = audit.score ?? 0;
                       const pred = estimateSelectedScore(curr, audit.issues, Array.from(simulatorSelectedIds)) ?? curr;
@@ -2599,7 +2607,7 @@ ${fixesPlanText || "No issues selected."}`;
               <button
                 type="button"
                 onClick={handleCopyFixPlan}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 duration-100 cursor-pointer select-none"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm active:scale-95 duration-100 cursor-pointer select-none"
               >
                 {copiedFixPlan ? (
                   <>
@@ -2617,13 +2625,14 @@ ${fixesPlanText || "No issues selected."}`;
             </div>
 
             {/* Main Area: Split Screen & Selection Sidebar */}
-            <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+            <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
               {/* Left & Right Preview Pane */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {simulatorSelectedIds.size === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3 py-16">
                     <span className="text-4xl">🛠️</span>
-                    <p className="text-sm font-semibold">Select one or more issues in the sidebar to simulate fixes.</p>
+                    <p className="text-sm font-semibold text-slate-500">Select one or more issues in the sidebar to simulate fixes.</p>
+                    <p className="text-xs text-slate-400">Click the checkboxes on the right to begin.</p>
                   </div>
                 ) : (
                   (() => {
@@ -2638,14 +2647,14 @@ ${fixesPlanText || "No issues selected."}`;
                     const simFixes = buildSimulatedFixes(audit, sortedSelected.map(s => s.id));
 
                     return (
-                      <div className="space-y-8">
+                      <div className="space-y-6">
                         {/* If screenshot audit, show visual simulation overlays before/after */}
                         {audit.inputType === "SCREENSHOT" && audit.uploadedImageUrl && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-950/20 border border-slate-800/80 rounded-2xl p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
                             {/* Before visual */}
                             <div className="space-y-2">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Before (Heatmap Active)</span>
-                              <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Before (Heatmap Active)</span>
+                              <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-white">
                                 <img src={audit.uploadedImageUrl} className="w-full h-auto block max-h-[300px] object-contain mx-auto opacity-80" alt="Before Screenshot" />
                                 {sortedSelected.map((issue, idx) => {
                                   if (!issue.boundingBox) return null;
@@ -2672,8 +2681,8 @@ ${fixesPlanText || "No issues selected."}`;
 
                             {/* Suggested After visual */}
                             <div className="space-y-2">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Suggested After (Simulated Preview)</span>
-                              <div className="relative border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">Suggested After (Simulated Preview)</span>
+                              <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-white">
                                 <img src={audit.uploadedImageUrl} className="w-full h-auto block max-h-[300px] object-contain mx-auto" alt="After Screenshot" />
                                 {sortedSelected.map((issue, idx) => {
                                   if (!issue.boundingBox) return null;
@@ -2697,53 +2706,61 @@ ${fixesPlanText || "No issues selected."}`;
                                 })}
                               </div>
                               <p className="text-[10px] text-slate-400 text-center italic mt-1.5">
-                                Visual simulation: markers indicate areas expected to improve after applying the recommendation.
+                                Visual simulation only. Code patches require a live URL or repository.
                               </p>
                             </div>
                           </div>
                         )}
 
                         {/* List of simulated fixes detail grid */}
-                        <div className="space-y-6">
+                        <div className="space-y-5">
                           {simFixes.map((fix, idx) => {
                             const originalIssue = sortedSelected[idx];
                             const originalDiff = originalIssue.fixDiff as { original?: string; patched?: string } | null;
+                            const hasCodeDiff = !!(originalDiff && originalDiff.original && originalDiff.patched);
+                            const isScreenshot = audit.inputType === "SCREENSHOT";
                             return (
-                              <div key={fix.issueId} className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/40">
+                              <div key={fix.issueId} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
                                 {/* Fix Header Bar */}
-                                <div className="px-4 py-3 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between">
+                                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                                   <div className="flex items-center gap-2.5">
-                                    <span className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-350">
+                                    <span className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
                                       {idx + 1}
                                     </span>
-                                    <span className="text-sm font-bold text-white">{fix.title}</span>
+                                    <span className="text-sm font-bold text-slate-800">{fix.title}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase ${
-                                      fix.severity === "critical" ? "bg-red-500/10 text-red-300 border-red-500/25" :
-                                      fix.severity === "serious" ? "bg-orange-500/10 text-orange-300 border-orange-500/25" :
-                                      "bg-amber-500/10 text-amber-300 border-amber-500/25"
+                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                                      fix.severity === "critical" ? "bg-red-55 text-red-700 border-red-200" :
+                                      fix.severity === "serious" ? "bg-orange-55 text-orange-700 border-orange-200" :
+                                      fix.severity === "moderate" ? "bg-amber-55 text-amber-700 border-amber-200" :
+                                      "bg-blue-55 text-blue-700 border-blue-200"
                                     }`}>
                                       {fix.severity}
                                     </span>
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
-                                      Estimated Lift: +{fix.scoreDelta}
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      +{fix.scoreDelta} pts
                                     </span>
+                                    {originalIssue.verifiedFixStatus === "success" && (
+                                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                                        ✓ Verified
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
                                 {/* Split View: Before vs Suggested After */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800/80">
+                                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
                                   {/* Before card */}
-                                  <div className="p-4 space-y-3">
+                                  <div className="p-4 space-y-3 bg-red-50/10">
                                     <div>
-                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Current state</span>
-                                      <p className="text-xs text-slate-350 leading-relaxed font-sans mt-1">{fix.beforeSummary}</p>
+                                      <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider block">Current Problem</span>
+                                      <p className="text-xs text-slate-600 leading-relaxed mt-1">{fix.beforeSummary}</p>
                                     </div>
                                     {originalIssue.elementSelector && (
-                                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5">
-                                        <span className="text-[8px] font-bold text-slate-550 uppercase block tracking-wider">Affected Selector</span>
-                                        <code className="text-[10px] font-mono text-slate-400 break-all select-all block mt-0.5">
+                                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5">
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase block tracking-wider">Affected Selector</span>
+                                        <code className="text-[10px] font-mono text-slate-600 break-all select-all block mt-0.5">
                                           {originalIssue.elementSelector}
                                         </code>
                                       </div>
@@ -2751,32 +2768,63 @@ ${fixesPlanText || "No issues selected."}`;
                                   </div>
 
                                   {/* Suggested After card */}
-                                  <div className="p-4 space-y-3 bg-emerald-950/5">
+                                  <div className="p-4 space-y-3 bg-emerald-50/10">
                                     <div>
-                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Suggested after state</span>
-                                      <p className="text-xs text-slate-300 leading-relaxed font-sans mt-1 font-semibold text-emerald-300">{fix.afterSummary}</p>
+                                      <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">Suggested After State</span>
+                                      <p className="text-xs text-emerald-800 leading-relaxed mt-1 font-medium">{fix.afterSummary}</p>
                                     </div>
-                                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-2.5">
-                                      <span className="text-[8px] font-bold text-slate-550 uppercase block tracking-wider">Implementation Guidance</span>
-                                      <p className="text-[10px] text-slate-350 font-sans leading-relaxed mt-0.5">{fix.implementationHint}</p>
-                                    </div>
+                                    {!hasCodeDiff && (
+                                      <div className="bg-gray-55 border border-gray-200 rounded-lg p-2.5">
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase block tracking-wider">
+                                          {isScreenshot ? "Visual Design Guidance" : "Implementation Guidance"}
+                                        </span>
+                                        <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">{fix.implementationHint}</p>
+                                        {isScreenshot && (
+                                          <p className="text-[10px] text-slate-400 italic mt-1.5">Connect a live URL or repository to generate verified code patches.</p>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
 
-                                {/* Code snippets if originalDiff exists */}
-                                {originalDiff && originalDiff.original && originalDiff.patched && (
-                                  <div className="border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800/80 bg-slate-950">
-                                    <div className="p-4 space-y-1.5">
-                                      <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider block">Original Code snippet</span>
-                                      <pre className="text-[10px] font-mono text-red-300 overflow-x-auto bg-slate-900 p-3 rounded-lg border border-red-500/10 leading-relaxed max-h-48 overflow-y-auto">
-                                        <code>{originalDiff.original}</code>
-                                      </pre>
+                                {/* Code Diff Panel — only when fixDiff exists and not a screenshot audit */}
+                                {hasCodeDiff && !isScreenshot && (
+                                  <div className="border-t border-gray-200">
+                                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                                      <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                      </svg>
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Code Diff</span>
+                                      {originalIssue.verifiedFixStatus === "success" ? (
+                                        <span className="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 ml-auto">Verified patch</span>
+                                      ) : (
+                                        <span className="text-[9px] font-medium text-slate-400 ml-auto">Suggested patch</span>
+                                      )}
                                     </div>
-                                    <div className="p-4 space-y-1.5">
-                                      <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">Suggested Patched Code</span>
-                                      <pre className="text-[10px] font-mono text-emerald-300 overflow-x-auto bg-slate-900 p-3 rounded-lg border border-emerald-500/10 leading-relaxed max-h-48 overflow-y-auto">
-                                        <code>{originalDiff.patched}</code>
-                                      </pre>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+                                      {/* Before code */}
+                                      <div className="p-3 space-y-1.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                                          <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider">Before</span>
+                                          {originalIssue.elementSelector && (
+                                            <span className="text-[9px] text-slate-400 font-mono ml-auto truncate max-w-[200px]">{originalIssue.elementSelector}</span>
+                                          )}
+                                        </div>
+                                        <pre className="text-[11px] font-mono text-red-800 overflow-x-auto bg-red-55 p-3 rounded-lg border border-red-100 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">
+                                          <code>{originalDiff!.original}</code>
+                                        </pre>
+                                      </div>
+                                      {/* After code */}
+                                      <div className="p-3 space-y-1.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                          <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">After</span>
+                                        </div>
+                                        <pre className="text-[11px] font-mono text-emerald-800 overflow-x-auto bg-emerald-55 p-3 rounded-lg border border-emerald-100 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap">
+                                          <code>{originalDiff!.patched}</code>
+                                        </pre>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -2791,15 +2839,26 @@ ${fixesPlanText || "No issues selected."}`;
               </div>
 
               {/* Sidebar: Checkbox Selector list */}
-              <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-950 flex flex-col flex-shrink-0 h-64 lg:h-auto overflow-hidden">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select Fixes to Simulate</span>
-                  <span className="text-[10px] font-bold bg-slate-800 text-slate-350 px-2 py-0.5 rounded-full">
-                    {simulatorSelectedIds.size} selected
-                  </span>
+              <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-200 bg-gray-50/50 flex flex-col flex-shrink-0 h-64 lg:h-auto overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Select Fixes</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">
+                      {simulatorSelectedIds.size} selected
+                    </span>
+                    {simulatorSelectedIds.size > 0 && (
+                      <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100 font-sans">
+                        +{(() => {
+                          const curr = audit.score ?? 0;
+                          const pred = estimateSelectedScore(curr, audit.issues, Array.from(simulatorSelectedIds)) ?? curr;
+                          return pred - curr;
+                        })()} pts
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                <div className="flex-1 overflow-y-auto p-3 space-y-1.5 font-sans">
                   {[...audit.issues]
                     .map(issue => {
                       const delta = typeof issue.scoreDelta === "number" ? issue.scoreDelta : estimateIssueScoreDelta(issue);
@@ -2811,10 +2870,10 @@ ${fixesPlanText || "No issues selected."}`;
                       return (
                         <label
                           key={issue.id}
-                          className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition cursor-pointer select-none ${
+                          className={`flex items-start gap-2.5 p-2.5 rounded-lg border transition cursor-pointer select-none ${
                             isChecked
-                              ? "bg-indigo-600/15 border-indigo-500/30 text-white shadow-sm"
-                              : "bg-slate-900/30 border-slate-800/80 text-slate-400 hover:bg-slate-900/50 hover:text-slate-300"
+                              ? "bg-blue-55/40 border-blue-200 text-slate-900 shadow-sm"
+                              : "bg-white border-gray-200 text-slate-600 hover:bg-gray-50 hover:border-gray-300"
                           }`}
                         >
                           <input
@@ -2828,16 +2887,16 @@ ${fixesPlanText || "No issues selected."}`;
                                 return next;
                               });
                             }}
-                            className="w-4 h-4 rounded border-slate-700 bg-slate-850 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 mt-0.5"
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 mt-0.5 accent-blue-600"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] font-bold text-slate-350 truncate">{getIssueTitle(issue)}</span>
-                              <span className="text-[9px] font-bold text-emerald-400 flex-shrink-0 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              <span className="text-[11px] font-semibold text-slate-700 truncate">{getIssueTitle(issue)}</span>
+                              <span className="text-[9px] font-bold text-emerald-700 flex-shrink-0 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
                                 +{issue.calculatedDelta}
                               </span>
                             </div>
-                            <span className="text-[9px] text-slate-500 block truncate mt-0.5">{issue.description}</span>
+                            <span className="text-[10px] text-slate-400 block truncate mt-0.5">{issue.description}</span>
                           </div>
                         </label>
                       );
